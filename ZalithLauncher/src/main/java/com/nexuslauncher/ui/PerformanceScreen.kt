@@ -41,11 +41,12 @@ private const val FPS_HISTORY_SIZE = 60
 
 @Composable
 fun PerformanceScreen(
-    metrics: NexusSystemMonitor.SystemMetrics = NexusSystemMonitor.SystemMetrics(),
-    boostReport: NexusBoostEngine.BoostReport = NexusBoostEngine.BoostReport(
+    metrics      : NexusSystemMonitor.SystemMetrics = NexusSystemMonitor.SystemMetrics(),
+    boostReport  : NexusBoostEngine.BoostReport = NexusBoostEngine.BoostReport(
         NexusBoostEngine.BoostState.IDLE, emptyList(), 0, 0, 0L
     ),
-    onBoost: () -> Unit = {}
+    onBoost      : () -> Unit = {},
+    onNavigateTo : (String) -> Unit = {}
 ) {
     var disableRender by remember { mutableStateOf(true) }
     var shadowStream  by remember { mutableStateOf(true) }
@@ -207,12 +208,32 @@ fun PerformanceScreen(
         }
 
         Spacer(Modifier.height(8.dp))
-        Text(
-            "Configurações Avançadas →",
-            color    = NexusCyan.copy(alpha = 0.6f),
-            fontSize = 11.sp,
-            modifier = Modifier.align(Alignment.End)
-        )
+        Spacer(Modifier.height(8.dp))
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            androidx.compose.material.Button(
+                onClick  = { onNavigateTo("chronos") },
+                modifier = Modifier.weight(1f).height(44.dp),
+                shape    = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                colors   = androidx.compose.material.ButtonDefaults.buttonColors(
+                    backgroundColor = androidx.compose.ui.graphics.Color(0xFF1C1C2E)
+                )
+            ) {
+                Text("📊 Ver Relatórios", color = NexusCyan, fontSize = 11.sp)
+            }
+            androidx.compose.material.Button(
+                onClick  = { onNavigateTo("helios") },
+                modifier = Modifier.weight(1f).height(44.dp),
+                shape    = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                colors   = androidx.compose.material.ButtonDefaults.buttonColors(
+                    backgroundColor = androidx.compose.ui.graphics.Color(0xFF1C1C2E)
+                )
+            ) {
+                Text("⚙ Configurações Avançadas", color = NexusCyan, fontSize = 11.sp)
+            }
+        }
     }
 }
 

@@ -30,7 +30,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.nexuslauncher.core.NexusBoostEngine
 import com.nexuslauncher.ui.AccountsScreen
 import com.nexuslauncher.ui.HomeScreen
 import com.nexuslauncher.ui.InstancesScreen
@@ -44,13 +43,9 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * SolarSystemScreen — Fase 3.5.
- *
- * IUx ESTÁTICA + navegação direta:
- * - Fundo espacial via gradiente Compose (sem SurfaceView/threads)
- * - Toque em planeta → vai DIRETO para a tela correspondente
- * - Sem painel lateral intermediário
- * - Planetas exibidos com labels de nome e descrição
+ * SolarSystemScreen — Fase 4.
+ * Navegação cruzada completa: onNavigateTo permite que qualquer tela
+ * navegue para qualquer outro planeta diretamente.
  */
 @Composable
 fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
@@ -60,7 +55,6 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
 
     var currentScreen by remember { mutableStateOf<String?>(null) }
 
-    // Armazena posições calculadas no último frame para hit-testing
     val planetHitAreas = remember { mutableListOf<Triple<String, Float, Float>>() }
 
     val infiniteTransition = rememberInfiniteTransition(label = "solar")
@@ -71,9 +65,11 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
         label         = "time"
     )
 
+    // Navegação cruzada: qualquer tela filho pode chamar onNavigateTo("id")
+    val navigateTo: (String) -> Unit = { dest -> currentScreen = dest }
+
     Box(Modifier.fillMaxSize()) {
 
-        // ── Fundo estático via Compose (sem SurfaceView) ─────────────────
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -87,7 +83,6 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
 
         if (currentScreen != null) {
 
-            // ── Tela do planeta selecionado ───────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -97,26 +92,34 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
                     "nexus"      -> HomeScreen(
                         instanceName = "Survival 1.18.1",
                         metrics      = metrics,
-                        onLaunchGame = { /* Manter funcionalidade original de lançamento */ }
+                        onLaunchGame = { /* Manter funcionalidade original de lançamento */ },
+                        onNavigateTo = navigateTo
                     )
                     "aetherion"  -> PerformanceScreen(
-                        metrics     = metrics,
-                        boostReport = boostReport,
-                        onBoost     = { vm.triggerBoost() }
+                        metrics      = metrics,
+                        boostReport  = boostReport,
+                        onBoost      = { vm.triggerBoost() },
+                        onNavigateTo = navigateTo
                     )
-                    "lumina"     -> VisualScreen()
+                    "lumina"     -> VisualScreen(onNavigateTo = navigateTo)
                     "modara",
-                    "curseforge" -> ModsScreen()
-                    "instarrion" -> InstancesScreen()
+                    "curseforge" -> ModsScreen(onNavigateTo = navigateTo)
+                    "instarrion" -> InstancesScreen(
+                        onLaunchGame = { /* Manter funcionalidade original */ },
+                        onNavigateTo = navigateTo
+                    )
                     "chronos",
-                    "cloudnexus" -> ReportsScreen()
-                    "persona"    -> AccountsScreen()
+                    "cloudnexus" -> ReportsScreen(onNavigateTo = navigateTo)
+                    "persona"    -> AccountsScreen(onNavigateTo = navigateTo)
                     "labx",
-                    "helios"     -> SettingsScreen()
-                    else         -> HomeScreen(instanceName = "Survival 1.18.1", metrics = metrics)
+                    "helios"     -> SettingsScreen(onNavigateTo = navigateTo)
+                    else         -> HomeScreen(
+                        instanceName = "Survival 1.18.1",
+                        metrics      = metrics,
+                        onNavigateTo = navigateTo
+                    )
                 }
 
-                // Botão voltar ao Sistema Solar
                 IconButton(
                     onClick  = { currentScreen = null },
                     modifier = Modifier
@@ -133,19 +136,18 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
 
         } else {
 
-            // ── Sistema Solar Canvas + hit-testing ───────────────────────
             val textPaintName = remember {
                 NativePaint().apply {
-                    color       = android.graphics.Color.WHITE
-                    textAlign   = NativePaint.Align.CENTER
+                    color          = android.graphics.Color.WHITE
+                    textAlign      = NativePaint.Align.CENTER
                     isFakeBoldText = true
-                    isAntiAlias = true
+                    isAntiAlias    = true
                 }
             }
             val textPaintDesc = remember {
                 NativePaint().apply {
-                    color     = android.graphics.Color.argb(180, 180, 220, 255)
-                    textAlign = NativePaint.Align.CENTER
+                    color       = android.graphics.Color.argb(180, 180, 220, 255)
+                    textAlign   = NativePaint.Align.CENTER
                     isAntiAlias = true
                 }
             }
@@ -174,7 +176,6 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
                 textPaintName.textSize = (12f * scale * 80f).coerceIn(22f, 38f)
                 textPaintDesc.textSize = (9f  * scale * 80f).coerceIn(16f, 28f)
 
-                // Névoas de fundo
                 val nebulaPaint = android.graphics.Paint().apply { isAntiAlias = true }
                 listOf(
                     Triple(cx - w * 0.2f, cy - h * 0.25f, "#1E0040"),
@@ -195,7 +196,6 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
                     drawContext.canvas.nativeCanvas.drawCircle(nx, ny, nRadius, nebulaPaint)
                 }
 
-                // Anéis orbitais
                 SolarSystem.PLANETS.forEach { planet ->
                     val rx = planet.orbitRadius * scale
                     val ry = rx * 0.40f
@@ -207,7 +207,6 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
                     )
                 }
 
-                // Sol central — Núcleo Nexus
                 val sunPulse = 1f + sin(t * 1.5f) * 0.04f
                 val sunR     = 52f * scale * sunPulse
                 repeat(4) { i ->
@@ -221,13 +220,8 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
                 drawCircle(color = Color(0xFFFFB300), radius = sunR,         center = Offset(cx, cy))
                 drawCircle(color = Color(0xFFFF8F00), radius = sunR * 0.7f,  center = Offset(cx, cy))
 
-                // Label do Sol
-                drawContext.canvas.nativeCanvas.drawText(
-                    "NÚCLEO NEXUS",
-                    cx, cy - sunR - 10f, textPaintName
-                )
+                drawContext.canvas.nativeCanvas.drawText("NÚCLEO NEXUS", cx, cy - sunR - 10f, textPaintName)
 
-                // Métricas ao redor do sol
                 val metricPaint = NativePaint().apply {
                     color       = android.graphics.Color.argb(200, 0, 229, 255)
                     textAlign   = NativePaint.Align.CENTER
@@ -239,7 +233,6 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
                     cx, cy + sunR + 26f, metricPaint
                 )
 
-                // Planetas + hit-areas
                 planetHitAreas.clear()
                 SolarSystem.PLANETS.forEach { planet ->
                     val angle = t * planet.orbitSpeed
@@ -251,25 +244,9 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
 
                     planetHitAreas.add(Triple(planet.id, px, py))
 
-                    // Halo
-                    drawCircle(
-                        color  = planet.color.copy(alpha = 0.18f),
-                        radius = pr * 2.8f,
-                        center = Offset(px, py)
-                    )
-                    // Corpo do planeta
-                    drawCircle(
-                        color  = planet.color,
-                        radius = pr,
-                        center = Offset(px, py)
-                    )
-                    // Brilho interno
-                    drawCircle(
-                        color  = Color.White.copy(alpha = 0.15f),
-                        radius = pr * 0.5f,
-                        center = Offset(px - pr * 0.2f, py - pr * 0.2f)
-                    )
-                    // Anel (todos os planetas têm anel sutil)
+                    drawCircle(color = planet.color.copy(alpha = 0.18f), radius = pr * 2.8f, center = Offset(px, py))
+                    drawCircle(color = planet.color,                      radius = pr,         center = Offset(px, py))
+                    drawCircle(color = Color.White.copy(alpha = 0.15f),   radius = pr * 0.5f,  center = Offset(px - pr * 0.2f, py - pr * 0.2f))
                     drawOval(
                         color   = planet.color.copy(alpha = 0.3f),
                         topLeft = Offset(px - pr * 1.6f, py - pr * 0.22f),
@@ -277,23 +254,12 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
                         style   = Stroke(width = 1.2f)
                     )
 
-                    // Nome do planeta
                     textPaintName.color = planet.color.toArgb()
-                    drawContext.canvas.nativeCanvas.drawText(
-                        planet.name,
-                        px, py - pr - 14f,
-                        textPaintName
-                    )
-                    // Descrição
-                    drawContext.canvas.nativeCanvas.drawText(
-                        planet.description,
-                        px, py + pr + 20f,
-                        textPaintDesc
-                    )
+                    drawContext.canvas.nativeCanvas.drawText(planet.name,        px, py - pr - 14f, textPaintName)
+                    drawContext.canvas.nativeCanvas.drawText(planet.description, px, py + pr + 20f, textPaintDesc)
                 }
             }
 
-            // ── Top HUD ────────────────────────────────────────────────
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -318,7 +284,6 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
                 )
             }
 
-            // ── Bottom bar ─────────────────────────────────────────────
             Row(
                 Modifier
                     .fillMaxWidth()
