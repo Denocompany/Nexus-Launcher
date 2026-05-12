@@ -29,6 +29,7 @@ val getBuildType = {
 }
 
 val nameId = "com.movtery.zalithlauncher"
+val appId  = "com.denocompany.nexuslauncher"  // Fase 3: applicationId separado do namespace
 val generatedZalithDir = file("$buildDir/generated/source/zalith/java")
 val launcherAPPName = project.findProperty("launcher_app_name") as? String ?: error("The \"launcher_app_name\" property is not set in gradle.properties.")
 val launcherName = project.findProperty("launcher_name") as? String ?: error("The \"launcher_name\" property is not set in gradle.properties.")
@@ -70,7 +71,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = nameId
+        applicationId = appId
         minSdk = 26
         targetSdk = 34
         versionCode = launcherVersionCode
@@ -285,6 +286,8 @@ dependencies {
     implementation("androidx.compose.material:material")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.compose.material3:material3")                         // Fase 3 (P02)
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")    // Fase 3 (P02)
     implementation("androidx.activity:activity-compose:1.8.2")
     debugImplementation("androidx.compose.ui:ui-tooling")
     // ──────────────────────────────────────────────────────────────────
