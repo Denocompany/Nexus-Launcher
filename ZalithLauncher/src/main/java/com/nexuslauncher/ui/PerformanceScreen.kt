@@ -36,44 +36,38 @@ import com.nexuslauncher.ui.theme.Obsidian
 import com.nexuslauncher.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 
-// Número máximo de amostras no histórico (60 segundos × 1 amostra/s)
 private const val FPS_HISTORY_SIZE = 60
 
+/**
+ * PerformanceScreen — AETHERION (Fase 4 / NavHost).
+ * Callbacks explícitos: onOpenReports, onOpenAdvancedSettings, onBackToSolar.
+ */
 @Composable
 fun PerformanceScreen(
-    metrics      : NexusSystemMonitor.SystemMetrics = NexusSystemMonitor.SystemMetrics(),
-    boostReport  : NexusBoostEngine.BoostReport = NexusBoostEngine.BoostReport(
+    metrics               : NexusSystemMonitor.SystemMetrics = NexusSystemMonitor.SystemMetrics(),
+    boostReport           : NexusBoostEngine.BoostReport = NexusBoostEngine.BoostReport(
         NexusBoostEngine.BoostState.IDLE, emptyList(), 0, 0, 0L
     ),
-    onBoost      : () -> Unit = {},
-    onNavigateTo : (String) -> Unit = {}
+    onBoost               : () -> Unit = {},
+    onOpenReports         : () -> Unit = {},
+    onOpenAdvancedSettings: () -> Unit = {},
+    onBackToSolar         : () -> Unit = {}
 ) {
     var disableRender by remember { mutableStateOf(true) }
     var shadowStream  by remember { mutableStateOf(true) }
     var effectBloom   by remember { mutableStateOf(false) }
 
-    // ── Rolling FPS buffer (1 sample/s, max 60 entries) ──────────────────
     val fpsHistory = remember { mutableStateListOf<Int>() }
-
-    // rememberUpdatedState garante que o LaunchedEffect sempre leia
-    // o valor ATUAL de metrics, sem precisar reiniciar o efeito.
-    // Sem isso, o coroutine capturaria o metrics da composição inicial
-    // e nunca atualizaria → gráfico sempre mostraria FPS = 0.
     val currentMetrics by rememberUpdatedState(metrics)
 
     LaunchedEffect(Unit) {
         while (true) {
             fpsHistory.add(currentMetrics.fpsCurrent)
-            if (fpsHistory.size > FPS_HISTORY_SIZE) {
-                fpsHistory.removeAt(0)
-            }
+            if (fpsHistory.size > FPS_HISTORY_SIZE) fpsHistory.removeAt(0)
             delay(1_000L)
         }
     }
 
-    // Live snapshot para estatísticas derivadas.
-    // Usa minOrNull()/maxOrNull() em vez de min()/max() para compatibilidade
-    // com todas as versões de Kotlin (min()/max() são deprecated em Kotlin 1.7+).
     val fpsMin = fpsHistory.minOrNull() ?: 0
     val fpsMax = fpsHistory.maxOrNull() ?: 0
     val fpsAvg = if (fpsHistory.isEmpty()) 0 else fpsHistory.average().toInt()
@@ -85,68 +79,36 @@ fun PerformanceScreen(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        // ── Título ────────────────────────────────────────────────────────
-        Text(
-            "PERFORMANCE",
-            color = NexusCyan,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.ExtraBold,
-            letterSpacing = 2.sp
-        )
+        Text("PERFORMANCE", color = NexusCyan, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
         Text("Classificação TI · Performance", color = TextSecondary, fontSize = 11.sp)
 
         Spacer(Modifier.height(20.dp))
 
-        // ── Métricas em tempo real ─────────────────────────────────────────
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MetricCard("FPS",  "${metrics.fpsCurrent}",                                         NexusCyan,            Modifier.weight(1f))
-            MetricCard("CPU",  "${metrics.cpuPercent}%",                                        NexusOrange,          Modifier.weight(1f))
-            MetricCard("GPU",  "${metrics.gpuPercent}%",                                        Color(0xFF7B61FF),    Modifier.weight(1f))
-            MetricCard("RAM",  "${String.format("%.1f", metrics.ramGb)}GB",                     Color(0xFF00E676),    Modifier.weight(1f))
+            MetricCard("FPS",  "${metrics.fpsCurrent}",                                    NexusCyan,            Modifier.weight(1f))
+            MetricCard("CPU",  "${metrics.cpuPercent}%",                                   NexusOrange,          Modifier.weight(1f))
+            MetricCard("GPU",  "${metrics.gpuPercent}%",                                   Color(0xFF7B61FF),    Modifier.weight(1f))
+            MetricCard("RAM",  "${String.format("%.1f", metrics.ramGb)}GB",                Color(0xFF00E676),    Modifier.weight(1f))
         }
 
         Spacer(Modifier.height(16.dp))
 
-        // ══════════════════════════════════════════════════════════════════
-        // ── Gráfico FPS em tempo real ──────────────────────────────────────
-        // ══════════════════════════════════════════════════════════════════
         PerfSection("📈 Gráfico FPS — Últimos ${fpsHistory.size}s") {
-            // Legenda superior
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 StatBadge("MÍN",  "$fpsMin",  NexusOrange)
                 StatBadge("MÉD",  "$fpsAvg",  Color(0xFFB0BEC5))
                 StatBadge("MÁX",  "$fpsMax",  Color(0xFF00E676))
                 StatBadge("ATUAL","${metrics.fpsCurrent}", NexusCyan)
             }
-
             Spacer(Modifier.height(8.dp))
-
-            // Canvas do gráfico
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(130.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF080814))
-                    .border(1.dp, NexusCyan.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                modifier = Modifier.fillMaxWidth().height(130.dp).clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF080814)).border(1.dp, NexusCyan.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
             ) {
-                FpsLineChart(
-                    fpsHistory   = fpsHistory,
-                    currentFps   = metrics.fpsCurrent,
-                    modifier     = Modifier.fillMaxSize()
-                )
+                FpsLineChart(fpsHistory = fpsHistory, currentFps = metrics.fpsCurrent, modifier = Modifier.fillMaxSize())
             }
-
             Spacer(Modifier.height(6.dp))
-
-            // Legenda eixo-X
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("-${fpsHistory.size}s", color = TextSecondary, fontSize = 9.sp)
                 Text("── 60 FPS target ──", color = NexusOrange.copy(alpha = 0.6f), fontSize = 9.sp)
                 Text("agora", color = TextSecondary, fontSize = 9.sp)
@@ -155,11 +117,10 @@ fun PerformanceScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // ── Barras de progresso ────────────────────────────────────────────
         PerfSection("Desempenho") {
             ProgressRow("FPS", metrics.fpsCurrent / 120f,                    NexusCyan,         "${metrics.fpsCurrent} FPS")
             Spacer(Modifier.height(8.dp))
-            ProgressRow("CPU", metrics.cpuPercent / 100f,                    NexusOrange,        "${metrics.cpuPercent}%")
+            ProgressRow("CPU", metrics.cpuPercent / 100f,                    NexusOrange,       "${metrics.cpuPercent}%")
             Spacer(Modifier.height(8.dp))
             ProgressRow("GPU", metrics.gpuPercent / 100f,                    Color(0xFF7B61FF), "${metrics.gpuPercent}%")
             Spacer(Modifier.height(8.dp))
@@ -173,7 +134,6 @@ fun PerformanceScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // ── Configurações de render ────────────────────────────────────────
         PerfSection("Configurações de Render") {
             CheckRow("Desativar Render de Sombras", disableRender, NexusCyan) { disableRender = it }
             CheckRow("Sombras Streaming",           shadowStream,  NexusCyan) { shadowStream  = it }
@@ -182,7 +142,6 @@ fun PerformanceScreen(
 
         Spacer(Modifier.height(20.dp))
 
-        // ── Nexus Boost ────────────────────────────────────────────────────
         Button(
             onClick  = onBoost,
             enabled  = boostReport.state != NexusBoostEngine.BoostState.RUNNING,
@@ -208,28 +167,21 @@ fun PerformanceScreen(
         }
 
         Spacer(Modifier.height(8.dp))
-        Spacer(Modifier.height(8.dp))
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            androidx.compose.material.Button(
-                onClick  = { onNavigateTo("chronos") },
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick  = onOpenReports,
                 modifier = Modifier.weight(1f).height(44.dp),
-                shape    = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
-                colors   = androidx.compose.material.ButtonDefaults.buttonColors(
-                    backgroundColor = androidx.compose.ui.graphics.Color(0xFF1C1C2E)
-                )
+                shape    = RoundedCornerShape(10.dp),
+                colors   = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF1C1C2E))
             ) {
                 Text("📊 Ver Relatórios", color = NexusCyan, fontSize = 11.sp)
             }
-            androidx.compose.material.Button(
-                onClick  = { onNavigateTo("helios") },
+            Button(
+                onClick  = onOpenAdvancedSettings,
                 modifier = Modifier.weight(1f).height(44.dp),
-                shape    = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
-                colors   = androidx.compose.material.ButtonDefaults.buttonColors(
-                    backgroundColor = androidx.compose.ui.graphics.Color(0xFF1C1C2E)
-                )
+                shape    = RoundedCornerShape(10.dp),
+                colors   = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF1C1C2E))
             ) {
                 Text("⚙ Configurações Avançadas", color = NexusCyan, fontSize = 11.sp)
             }
@@ -237,219 +189,94 @@ fun PerformanceScreen(
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// ── FpsLineChart — Canvas composable do gráfico de linha ─────────────────────
-// ══════════════════════════════════════════════════════════════════════════════
-
 @Composable
-private fun FpsLineChart(
-    fpsHistory: List<Int>,
-    currentFps: Int,
-    modifier: Modifier = Modifier
-) {
-    // Escala Y: 0 ... yMax arredondado para múltiplo de 30
+private fun FpsLineChart(fpsHistory: List<Int>, currentFps: Int, modifier: Modifier = Modifier) {
     val yMax = if (fpsHistory.isEmpty()) 120
                else maxOf(120, (((fpsHistory.maxOrNull() ?: 0) / 30 + 1) * 30))
 
     Canvas(modifier = modifier) {
         if (fpsHistory.size < 2) return@Canvas
-
-        val w      = size.width
-        val h      = size.height
-        val padL   = 36f   // espaço eixo Y
-        val padR   = 8f
-        val padT   = 12f
-        val padB   = 12f
-        val chartW = w - padL - padR
-        val chartH = h - padT - padB
+        val w = size.width; val h = size.height
+        val padL = 36f; val padR = 8f; val padT = 12f; val padB = 12f
+        val chartW = w - padL - padR; val chartH = h - padT - padB
 
         fun xOf(i: Int) = padL + (i.toFloat() / (fpsHistory.size - 1)) * chartW
         fun yOf(fps: Int) = padT + chartH - (fps.toFloat() / yMax) * chartH
 
-        // ── Linhas de grade horizontais ──────────────────────────────────
-        val gridLevels = listOf(0, 30, 60, 90, 120).filter { it <= yMax }
-        val gridPaint = android.graphics.Paint().apply {
-            color = android.graphics.Color.argb(40, 100, 150, 255)
-            strokeWidth = 1f
-            isAntiAlias = true
-        }
-        val labelPaint = android.graphics.Paint().apply {
-            color = android.graphics.Color.argb(140, 160, 170, 200)
-            textSize = 22f
-            isAntiAlias = true
-            textAlign = android.graphics.Paint.Align.RIGHT
-        }
-        gridLevels.forEach { fps ->
+        val gridPaint = android.graphics.Paint().apply { color = android.graphics.Color.argb(40, 100, 150, 255); strokeWidth = 1f; isAntiAlias = true }
+        val labelPaint = android.graphics.Paint().apply { color = android.graphics.Color.argb(140, 160, 170, 200); textSize = 22f; isAntiAlias = true; textAlign = android.graphics.Paint.Align.RIGHT }
+        listOf(0, 30, 60, 90, 120).filter { it <= yMax }.forEach { fps ->
             val y = yOf(fps)
             drawContext.canvas.nativeCanvas.drawLine(padL, y, w - padR, y, gridPaint)
             drawContext.canvas.nativeCanvas.drawText("$fps", padL - 4f, y + 8f, labelPaint)
         }
 
-        // ── Linha dos 60 FPS (target) ─────────────────────────────────────
         val targetY = yOf(60)
-        val targetPaint = android.graphics.Paint().apply {
-            color = android.graphics.Color.argb(120, 255, 109, 0)
-            strokeWidth = 2f
-            isAntiAlias = true
-            pathEffect = android.graphics.DashPathEffect(floatArrayOf(8f, 6f), 0f)
-        }
+        val targetPaint = android.graphics.Paint().apply { color = android.graphics.Color.argb(120, 255, 109, 0); strokeWidth = 2f; isAntiAlias = true; pathEffect = android.graphics.DashPathEffect(floatArrayOf(8f, 6f), 0f) }
         drawContext.canvas.nativeCanvas.drawLine(padL, targetY, w - padR, targetY, targetPaint)
 
-        // ── Área preenchida sob a linha (gradiente ciano→transparente) ───
         val fillPath = Path().apply {
             moveTo(xOf(0), yOf(fpsHistory[0]))
             for (i in 1 until fpsHistory.size) {
-                // Interpolação suave tipo bezier usando pontos de controle
-                val x0 = xOf(i - 1);  val y0 = yOf(fpsHistory[i - 1])
-                val x1 = xOf(i);      val y1 = yOf(fpsHistory[i])
-                val cpX = (x0 + x1) / 2f
+                val x0 = xOf(i - 1); val y0 = yOf(fpsHistory[i - 1]); val x1 = xOf(i); val y1 = yOf(fpsHistory[i]); val cpX = (x0 + x1) / 2f
                 cubicTo(cpX, y0, cpX, y1, x1, y1)
             }
-            lineTo(xOf(fpsHistory.size - 1), padT + chartH)
-            lineTo(xOf(0),                   padT + chartH)
-            close()
+            lineTo(xOf(fpsHistory.size - 1), padT + chartH); lineTo(xOf(0), padT + chartH); close()
         }
-        drawPath(
-            path  = fillPath,
-            brush = Brush.verticalGradient(
-                colors     = listOf(NexusCyan.copy(alpha = 0.35f), NexusCyan.copy(alpha = 0.02f)),
-                startY     = padT,
-                endY       = padT + chartH
-            )
-        )
+        drawPath(fillPath, brush = Brush.verticalGradient(listOf(NexusCyan.copy(alpha = 0.35f), NexusCyan.copy(alpha = 0.02f)), startY = padT, endY = padT + chartH))
 
-        // ── Linha principal ────────────────────────────────────────────────
         val linePath = Path().apply {
             moveTo(xOf(0), yOf(fpsHistory[0]))
             for (i in 1 until fpsHistory.size) {
-                val x0 = xOf(i - 1); val y0 = yOf(fpsHistory[i - 1])
-                val x1 = xOf(i);     val y1 = yOf(fpsHistory[i])
-                val cpX = (x0 + x1) / 2f
+                val x0 = xOf(i - 1); val y0 = yOf(fpsHistory[i - 1]); val x1 = xOf(i); val y1 = yOf(fpsHistory[i]); val cpX = (x0 + x1) / 2f
                 cubicTo(cpX, y0, cpX, y1, x1, y1)
             }
         }
-        drawPath(
-            path  = linePath,
-            color = NexusCyan,
-            style = Stroke(width = 2.5f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-        )
+        drawPath(linePath, color = NexusCyan, style = Stroke(width = 2.5f, cap = StrokeCap.Round, join = StrokeJoin.Round))
 
-        // ── Ponto no valor actual (último) ─────────────────────────────────
-        val lastX = xOf(fpsHistory.size - 1)
-        val lastY = yOf(fpsHistory.last())
-        // Halo
-        drawCircle(
-            color  = NexusCyan.copy(alpha = 0.25f),
-            radius = 9f,
-            center = Offset(lastX, lastY)
-        )
-        // Dot
-        drawCircle(
-            color  = NexusCyan,
-            radius = 4.5f,
-            center = Offset(lastX, lastY)
-        )
-        // Ponto branco interno
-        drawCircle(
-            color  = Color.White,
-            radius = 2f,
-            center = Offset(lastX, lastY)
-        )
+        val lastX = xOf(fpsHistory.size - 1); val lastY = yOf(fpsHistory.last())
+        drawCircle(color = NexusCyan.copy(alpha = 0.25f), radius = 9f, center = Offset(lastX, lastY))
+        drawCircle(color = NexusCyan, radius = 4.5f, center = Offset(lastX, lastY))
+        drawCircle(color = Color.White, radius = 2f, center = Offset(lastX, lastY))
 
-        // ── Label do valor actual flutuando sobre o ponto ─────────────────
-        val floatLabelPaint = android.graphics.Paint().apply {
-            color = android.graphics.Color.WHITE
-            textSize = 24f
-            isFakeBoldText = true
-            isAntiAlias = true
-            textAlign = android.graphics.Paint.Align.CENTER
-        }
-        val labelY = (lastY - 14f).coerceAtLeast(padT + 24f)
-        drawContext.canvas.nativeCanvas.drawText(
-            "${fpsHistory.last()} FPS",
-            lastX, labelY, floatLabelPaint
-        )
+        val floatLabelPaint = android.graphics.Paint().apply { color = android.graphics.Color.WHITE; textSize = 24f; isFakeBoldText = true; isAntiAlias = true; textAlign = android.graphics.Paint.Align.CENTER }
+        drawContext.canvas.nativeCanvas.drawText("${fpsHistory.last()} FPS", lastX, (lastY - 14f).coerceAtLeast(padT + 24f), floatLabelPaint)
 
-        // ── Colorir picos de queda (FPS < 30) com marca vermelha ─────────
-        val dropPaint = android.graphics.Paint().apply {
-            color = android.graphics.Color.argb(180, 255, 50, 50)
-            strokeWidth = 2f
-            isAntiAlias = true
-        }
-        fpsHistory.forEachIndexed { i, fps ->
-            if (fps < 30) {
-                val px = xOf(i); val py = yOf(fps)
-                drawContext.canvas.nativeCanvas.drawCircle(px, py, 4f, dropPaint)
-            }
-        }
+        val dropPaint = android.graphics.Paint().apply { color = android.graphics.Color.argb(180, 255, 50, 50); strokeWidth = 2f; isAntiAlias = true }
+        fpsHistory.forEachIndexed { i, fps -> if (fps < 30) drawContext.canvas.nativeCanvas.drawCircle(xOf(i), yOf(fps), 4f, dropPaint) }
     }
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun StatBadge(label: String, value: String, color: Color) {
+@Composable private fun StatBadge(label: String, value: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, color = color, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         Text(label, color = TextSecondary, fontSize = 9.sp, letterSpacing = 0.5.sp)
     }
 }
-
-@Composable
-private fun MetricCard(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xFF121218))
-            .border(1.dp, color.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
-            .padding(10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+@Composable private fun MetricCard(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.clip(RoundedCornerShape(10.dp)).background(Color(0xFF121218)).border(1.dp, color.copy(alpha = 0.3f), RoundedCornerShape(10.dp)).padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, color = color, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Text(label, color = TextSecondary, fontSize = 10.sp)
     }
 }
-
-@Composable
-private fun PerfSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Obsidian)
-            .padding(14.dp)
-    ) {
+@Composable private fun PerfSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Obsidian).padding(14.dp)) {
         Text(title, color = NexusCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
-        Spacer(Modifier.height(12.dp))
-        content()
+        Spacer(Modifier.height(12.dp)); content()
     }
 }
-
-@Composable
-private fun ProgressRow(label: String, progress: Float, color: Color, valueText: String) {
+@Composable private fun ProgressRow(label: String, progress: Float, color: Color, valueText: String) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, color = TextSecondary, fontSize = 11.sp, modifier = Modifier.width(40.dp))
         Spacer(Modifier.width(8.dp))
-        LinearProgressIndicator(
-            progress        = progress.coerceIn(0f, 1f),
-            modifier        = Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp)),
-            color           = color,
-            backgroundColor = color.copy(alpha = 0.15f)
-        )
+        LinearProgressIndicator(progress = progress.coerceIn(0f, 1f), modifier = Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp)), color = color, backgroundColor = color.copy(alpha = 0.15f))
         Spacer(Modifier.width(8.dp))
-        Text(valueText, color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-            modifier = Modifier.width(60.dp))
+        Text(valueText, color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(60.dp))
     }
 }
-
-@Composable
-private fun CheckRow(label: String, checked: Boolean, color: Color, onCheck: (Boolean) -> Unit) {
+@Composable private fun CheckRow(label: String, checked: Boolean, color: Color, onCheck: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(
-            checked         = checked,
-            onCheckedChange = onCheck,
-            colors          = CheckboxDefaults.colors(checkedColor = color)
-        )
+        Checkbox(checked = checked, onCheckedChange = onCheck, colors = CheckboxDefaults.colors(checkedColor = color))
         Spacer(Modifier.width(4.dp))
         Text(label, color = TextSecondary, fontSize = 12.sp)
     }
