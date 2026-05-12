@@ -14,28 +14,40 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.sp
-import com.nexuslauncher.ui.theme.DeepVoid
 import com.nexuslauncher.ui.theme.Graphite
 import com.nexuslauncher.ui.theme.NexusCyan
 import com.nexuslauncher.ui.theme.TextSecondary
 
-/** Enum com todas as abas disponíveis no Nexus Launcher. */
+/**
+ * NexusTab — abas da navegação clássica (Fase 1).
+ *
+ * @deprecated Substituído pelo Sistema Solar (SolarSystemScreen — Fase 3).
+ *             Mantido para referência histórica. Não utilizar em código novo.
+ */
+@Deprecated(
+    message = "Substituído por SolarSystemScreen (Fase 3). Use a navegação por planetas.",
+    level   = DeprecationLevel.WARNING
+)
 enum class NexusTab(val label: String, val icon: ImageVector) {
-    HOME("Home", Icons.Filled.Home),
+    HOME("Home",            Icons.Filled.Home),
     PERFORMANCE("Performance", Icons.Filled.Star),
-    VISUAL("Visual", Icons.Filled.Build),
-    MODS("Mods", Icons.Filled.List),
+    VISUAL("Visual",        Icons.Filled.Build),
+    MODS("Mods",            Icons.Filled.List),
     INSTANCES("Instâncias", Icons.Filled.Info),
-    REPORTS("Relatórios", Icons.Filled.Settings)
+    REPORTS("Relatórios",   Icons.Filled.Settings)
 }
 
 /**
- * Barra de navegação inferior do Nexus Launcher.
+ * NexusBottomNav — barra de navegação inferior clássica (Fase 1).
  *
- * @param currentTab  Aba atualmente selecionada.
- * @param onTabSelected Callback chamado ao selecionar uma aba.
+ * @deprecated Substituído pelo Sistema Solar (SolarSystemScreen — Fase 3).
  */
+@Deprecated(
+    message = "Substituído por SolarSystemScreen (Fase 3). Use a navegação por planetas.",
+    level   = DeprecationLevel.WARNING
+)
 @Composable
+@Suppress("DEPRECATION")
 fun NexusBottomNav(
     currentTab: NexusTab,
     onTabSelected: (NexusTab) -> Unit
@@ -47,23 +59,17 @@ fun NexusBottomNav(
         NexusTab.values().forEach { tab ->
             val selected = tab == currentTab
             BottomNavigationItem(
-                selected         = selected,
-                onClick          = { onTabSelected(tab) },
-                label            = {
-                    Text(
-                        text     = tab.label,
-                        fontSize = 10.sp,
-                        color    = if (selected) NexusCyan else TextSecondary
-                    )
+                selected               = selected,
+                onClick                = { onTabSelected(tab) },
+                label                  = {
+                    Text(tab.label, fontSize = 10.sp,
+                        color = if (selected) NexusCyan else TextSecondary)
                 },
-                icon             = {
-                    Icon(
-                        imageVector = tab.icon,
-                        contentDescription = tab.label,
-                        tint = if (selected) NexusCyan else TextSecondary
-                    )
+                icon                   = {
+                    Icon(tab.icon, contentDescription = tab.label,
+                        tint = if (selected) NexusCyan else TextSecondary)
                 },
-                alwaysShowLabel  = true,
+                alwaysShowLabel        = true,
                 selectedContentColor   = NexusCyan,
                 unselectedContentColor = TextSecondary
             )
