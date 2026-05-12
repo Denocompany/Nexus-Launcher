@@ -16,17 +16,21 @@ import com.nexuslauncher.components.NexusButton
 import com.nexuslauncher.components.NexusCard
 import com.nexuslauncher.components.NexusSmallCard
 import com.nexuslauncher.components.NexusTextButton
+import com.nexuslauncher.core.NexusSystemMonitor
 import com.nexuslauncher.ui.theme.DeepVoid
 import com.nexuslauncher.ui.theme.NexusCyan
 import com.nexuslauncher.ui.theme.TextSecondary
 
 /**
- * Tela inicial do Nexus Launcher.
- * Exibe: título, última instância, status do sistema,
+ * Tela inicial do Nexus Launcher (Fase 3).
+ * Exibe: título, última instância, status do sistema ao vivo,
  * botão INICIAR JOGO e linha de atalhos rápidos.
  */
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    instanceName: String                        = "Survival 1.18.1",
+    metrics:      NexusSystemMonitor.SystemMetrics = NexusSystemMonitor.SystemMetrics()
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -45,42 +49,48 @@ fun HomeScreen() {
             textAlign     = TextAlign.Center
         )
         Text(
-            text      = "Minecraft Java Edition",
-            color     = TextSecondary,
-            fontSize  = 13.sp,
-            modifier  = Modifier.padding(top = 4.dp, bottom = 24.dp)
+            text     = "Minecraft Java Edition",
+            color    = TextSecondary,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(top = 4.dp, bottom = 24.dp)
         )
 
         // ── Card: Última Instância ────────────────────────────────────────
         NexusCard(
             title   = "Última Instância",
-            content = "Survival 1.18.1",
+            content = instanceName,
             extra   = {
                 Spacer(modifier = Modifier.height(8.dp))
                 Row {
-                    NexusTextButton(label = "Configurar",  onClick = { /* TODO Fase 2 */ })
+                    NexusTextButton(label = "Configurar", onClick = { /* TODO Fase 3 */ })
                     Spacer(modifier = Modifier.width(8.dp))
-                    NexusTextButton(label = "Gerenciar",   onClick = { /* TODO Fase 2 */ })
+                    NexusTextButton(label = "Gerenciar",  onClick = { /* TODO Fase 3 */ })
                 }
             }
         )
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // ── Card: Status do Sistema ───────────────────────────────────────
+        // ── Card: Status do Sistema (dados ao vivo) ───────────────────────
         NexusCard(
             title   = "Status do Sistema",
             content = "",
             extra   = {
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    SystemStat(label = "FPS", value = "75")
-                    SystemStat(label = "CPU", value = "28%")
-                    SystemStat(label = "GPU", value = "47%")
+                    SystemStat(label = "FPS", value = "${metrics.fpsCurrent}")
+                    SystemStat(label = "CPU", value = "${metrics.cpuPercent}%")
+                    SystemStat(label = "GPU", value = "${metrics.gpuPercent}%")
                 }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text     = "RAM: ${String.format("%.1f", metrics.ramGb)} / ${String.format("%.1f", metrics.ramTotalGb)} GB",
+                    color    = TextSecondary,
+                    fontSize = 11.sp
+                )
             }
         )
 
@@ -88,8 +98,8 @@ fun HomeScreen() {
 
         // ── Botão INICIAR JOGO ────────────────────────────────────────────
         NexusButton(
-            label    = "🚀  INICIAR JOGO",
-            onClick  = { /* TODO Fase 2: lançar o Minecraft */ },
+            label   = "🚀  INICIAR JOGO",
+            onClick = { /* TODO Fase 3: lançar LauncherActivity */ },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
@@ -99,21 +109,21 @@ fun HomeScreen() {
 
         // ── Atalhos rápidos ───────────────────────────────────────────────
         Text(
-            text      = "ATALHOS RÁPIDOS",
-            color     = TextSecondary,
-            fontSize  = 11.sp,
+            text          = "ATALHOS RÁPIDOS",
+            color         = TextSecondary,
+            fontSize      = 11.sp,
             letterSpacing = 1.5.sp,
-            modifier  = Modifier
+            modifier      = Modifier
                 .align(Alignment.Start)
                 .padding(bottom = 10.dp)
         )
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier              = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             NexusSmallCard(
                 title    = "Otimização",
-                subtitle = "Modo Equilíbrio",
+                subtitle = "Tier ${metrics.fpsCurrent / 20 + 1}",
                 modifier = Modifier.weight(1f)
             )
             NexusSmallCard(
@@ -124,7 +134,7 @@ fun HomeScreen() {
         }
         Spacer(modifier = Modifier.height(8.dp))
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier              = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             NexusSmallCard(
@@ -134,7 +144,7 @@ fun HomeScreen() {
             )
             NexusSmallCard(
                 title    = "Desempenho",
-                subtitle = "FPS médio 76",
+                subtitle = "FPS médio ${metrics.fpsCurrent}",
                 modifier = Modifier.weight(1f)
             )
         }
