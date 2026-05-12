@@ -21,11 +21,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nexuslauncher.datastore.NexusDataStore
 import com.nexuslauncher.ui.theme.DeepVoid
 import com.nexuslauncher.ui.theme.NexusCyan
 import com.nexuslauncher.ui.theme.NexusOrange
 import com.nexuslauncher.ui.theme.Obsidian
 import com.nexuslauncher.ui.theme.TextSecondary
+import com.nexuslauncher.viewmodel.AccountsViewModel
 
 data class NexusAccount(
     val id       : String,
@@ -40,24 +43,37 @@ private val SKIN_PRESETS = listOf(
     "Steve (Padrão)", "Alex (Padrão)", "Slim Steve", "Enderman", "Creeper", "Personalizada"
 )
 
-/**
- * AccountsScreen — PERSONA (Fase 4 / NavHost).
- * Callbacks explícitos: onBackToHome, onGoInstances, onBackToSolar.
- */
 @Composable
 fun AccountsScreen(
+    nexusDataStore: NexusDataStore? = null,
     onBackToHome  : () -> Unit = {},
     onGoInstances : () -> Unit = {},
     onBackToSolar : () -> Unit = {}
 ) {
+    val vm: AccountsViewModel? = nexusDataStore?.let {
+        viewModel(factory = AccountsViewModel.factory(it))
+    }
+    val savedActive   by (vm?.activeAccount   ?: kotlinx.coroutines.flow.flowOf("")).collectAsState(initial = "")
+    val savedOffline  by (vm?.offlineAccounts  ?: kotlinx.coroutines.flow.flowOf(emptySet<String>())).collectAsState(initial = emptySet())
+    val savedSkin     by (vm?.activeSkin       ?: kotlinx.coroutines.flow.flowOf("")).collectAsState(initial = "")
+
     val accounts = remember { mutableStateListOf<NexusAccount>() }
     var selectedTab      by remember { mutableStateOf(0) }
-    var activeAccountId  by remember { mutableStateOf<String?>(null) }
+    var activeAccountId  by remember(savedActive) { mutableStateOf(savedActive) }
     var offlineName      by remember { mutableStateOf("") }
     var offlineNameError by remember { mutableStateOf(false) }
     var selectedSkin     by remember { mutableStateOf(0) }
     val tabs = listOf("Microsoft", "Offline", "Skins")
     val activeAccount = accounts.firstOrNull { it.id == activeAccountId }
+
+    // Restore offline accounts from DataStore on first load
+    LaunchedEffect(savedOffline) {
+        if (savedOffline.isNotEmpty() && accounts.none { it.type == AccountType.OFFLINE }) {
+            savedOffline.forEach { username ->
+                accounts.add(NexusAccount(id = username, username = username, type = AccountType.OFFLINE))
+            }
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(DeepVoid).verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text("CONTAS", color = NexusCyan, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
@@ -105,7 +121,7 @@ fun AccountsScreen(
                     Text("A autenticação Microsoft requer conexão com os servidores da Mojang. O fluxo OAuth2 será implementado na próxima atualização do Nexus.", color = TextSecondary, fontSize = 12.sp)
                     Spacer(Modifier.height(16.dp))
                     val msAccounts = accounts.filter { it.type == AccountType.MICROSOFT }
-                    if (msAccounts.isNotEmpty()) { msAccounts.forEach { acc -> AccountRow(account = acc, isActive = acc.id == activeAccountId, onSetActive = { activeAccountId = acc.id }, onRemove = { accounts.remove(acc); if (activeAccountId == acc.id) activeAccountId = null }); Divider(color = Color(0xFF1A1A28)) }; Spacer(Modifier.height(12.dp)) }
+                    if (msAccounts.isNotEmpty()) { msAccounts.forEach { acc -> AccountRow(account = acc, isActive = acc.id == activeAccountId, onSetActive = { activeAccountId = acc.id; vm?.updateActiveAccount(acc.id) }, onRemove = { accounts.remove(acc); if (activeAccountId == acc.id) { activeAccountId = ""; vm?.updateActiveAccount("") } }); Divider(color = Color(0xFF1A1A28)) }; Spacer(Modifier.height(12.dp)) }
                     Button(onClick = {}, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF0078D4))) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Text("🔷", fontSize = 16.sp); Text("Adicionar Conta Microsoft", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
                     }
@@ -122,9 +138,20 @@ fun AccountsScreen(
                     OutlinedTextField(value = offlineName, onValueChange = { offlineName = it.take(16); offlineNameError = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Nome do jogador (máx. 16 caracteres)", color = TextSecondary, fontSize = 11.sp) }, isError = offlineNameError, singleLine = true, colors = TextFieldDefaults.outlinedTextFieldColors(textColor = Color.White, focusedBorderColor = Color(0xFF00E676), unfocusedBorderColor = TextSecondary.copy(0.4f), errorBorderColor = NexusOrange, cursorColor = Color(0xFF00E676)))
                     if (offlineNameError) Text("Nome inválido ou já existe", color = NexusOrange, fontSize = 10.sp)
                     Spacer(Modifier.height(10.dp))
-                    Button(onClick = { val trimmed = offlineName.trim(); if (trimmed.length < 3) { offlineNameError = true } else if (accounts.any { it.username.equals(trimmed, ignoreCase = true) }) { offlineNameError = true } else { val newAcc = NexusAccount(id = System.currentTimeMillis().toString(), username = trimmed, type = AccountType.OFFLINE, isActive = accounts.isEmpty()); accounts.add(newAcc); if (accounts.size == 1) activeAccountId = newAcc.id; offlineName = ""; offlineNameError = false } }, enabled = offlineName.trim().length >= 3, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF00E676), disabledBackgroundColor = Color(0xFF00E676).copy(0.3f))) { Text("+ ADICIONAR CONTA OFFLINE", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+                    Button(onClick = {
+                        val trimmed = offlineName.trim()
+                        if (trimmed.length < 3) { offlineNameError = true }
+                        else if (accounts.any { it.username.equals(trimmed, ignoreCase = true) }) { offlineNameError = true }
+                        else {
+                            val newAcc = NexusAccount(id = trimmed, username = trimmed, type = AccountType.OFFLINE, isActive = accounts.isEmpty())
+                            accounts.add(newAcc)
+                            if (accounts.size == 1) { activeAccountId = newAcc.id; vm?.updateActiveAccount(newAcc.id) }
+                            vm?.updateOfflineAccounts(accounts.filter { it.type == AccountType.OFFLINE }.map { it.username }.toSet())
+                            offlineName = ""; offlineNameError = false
+                        }
+                    }, enabled = offlineName.trim().length >= 3, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF00E676), disabledBackgroundColor = Color(0xFF00E676).copy(0.3f))) { Text("+ ADICIONAR CONTA OFFLINE", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp) }
                     val offlineAccounts = accounts.filter { it.type == AccountType.OFFLINE }
-                    if (offlineAccounts.isNotEmpty()) { Spacer(Modifier.height(16.dp)); Divider(color = Color(0xFF1A1A28)); Spacer(Modifier.height(8.dp)); Text("${offlineAccounts.size} conta(s) offline", color = TextSecondary, fontSize = 11.sp); Spacer(Modifier.height(8.dp)); offlineAccounts.forEach { acc -> AccountRow(account = acc, isActive = acc.id == activeAccountId, onSetActive = { activeAccountId = acc.id }, onRemove = { accounts.remove(acc); if (activeAccountId == acc.id) activeAccountId = accounts.firstOrNull()?.id }); Divider(color = Color(0xFF1A1A28)) } }
+                    if (offlineAccounts.isNotEmpty()) { Spacer(Modifier.height(16.dp)); Divider(color = Color(0xFF1A1A28)); Spacer(Modifier.height(8.dp)); Text("${offlineAccounts.size} conta(s) offline", color = TextSecondary, fontSize = 11.sp); Spacer(Modifier.height(8.dp)); offlineAccounts.forEach { acc -> AccountRow(account = acc, isActive = acc.id == activeAccountId, onSetActive = { activeAccountId = acc.id; vm?.updateActiveAccount(acc.id) }, onRemove = { accounts.remove(acc); if (activeAccountId == acc.id) { activeAccountId = accounts.firstOrNull()?.id ?: ""; vm?.updateActiveAccount(activeAccountId) }; vm?.updateOfflineAccounts(accounts.filter { it.type == AccountType.OFFLINE }.map { it.username }.toSet()) }); Divider(color = Color(0xFF1A1A28)) } }
                 }
             }
             2 -> {
@@ -140,7 +167,7 @@ fun AccountsScreen(
                         Spacer(Modifier.height(12.dp))
                         SKIN_PRESETS.forEachIndexed { i, skin ->
                             val isSel = selectedSkin == i
-                            Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (isSel) NexusCyan.copy(0.1f) else Color.Transparent).border(1.dp, if (isSel) NexusCyan else Color(0xFF222230), RoundedCornerShape(8.dp)).clickable { selectedSkin = i }.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                            Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (isSel) NexusCyan.copy(0.1f) else Color.Transparent).border(1.dp, if (isSel) NexusCyan else Color(0xFF222230), RoundedCornerShape(8.dp)).clickable { selectedSkin = i; vm?.updateActiveSkin(skin) }.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Box(modifier = Modifier.size(36.dp).clip(RoundedCornerShape(6.dp)).background(NexusCyan.copy(0.08f)).border(1.dp, NexusCyan.copy(0.2f), RoundedCornerShape(6.dp)), contentAlignment = Alignment.Center) { Text(if (i == 5) "📤" else "🧍", fontSize = 16.sp) }
                                     Text(skin, color = if (isSel) NexusCyan else Color.White, fontSize = 13.sp, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal)

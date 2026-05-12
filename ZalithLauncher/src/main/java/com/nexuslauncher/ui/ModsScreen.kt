@@ -23,11 +23,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nexuslauncher.datastore.NexusDataStore
 import com.nexuslauncher.ui.theme.DeepVoid
 import com.nexuslauncher.ui.theme.NexusCyan
 import com.nexuslauncher.ui.theme.NexusOrange
 import com.nexuslauncher.ui.theme.Obsidian
 import com.nexuslauncher.ui.theme.TextSecondary
+import com.nexuslauncher.viewmodel.ModsViewModel
 
 data class ModItem(
     val id          : String,
@@ -46,16 +49,19 @@ data class ResourcePack(
     val priority: Int     = 0
 )
 
-/**
- * ModsScreen — MODARA (Fase 4 / NavHost).
- * Callbacks explícitos: onBackToInstances, onOpenVisual, onBackToSolar.
- */
 @Composable
 fun ModsScreen(
+    nexusDataStore   : NexusDataStore? = null,
     onBackToInstances: () -> Unit = {},
     onOpenVisual     : () -> Unit = {},
     onBackToSolar    : () -> Unit = {}
 ) {
+    val vm: ModsViewModel? = nexusDataStore?.let {
+        viewModel(factory = ModsViewModel.factory(it))
+    }
+    val savedModsEnabled by (vm?.modsEnabled ?: kotlinx.coroutines.flow.flowOf(emptySet<String>())).collectAsState(initial = emptySet())
+    val savedPacksEnabled by (vm?.resourcePacksEnabled ?: kotlinx.coroutines.flow.flowOf(emptySet<String>())).collectAsState(initial = emptySet())
+
     val mods = remember {
         mutableStateListOf(
             ModItem("1", "Nexus Textures",  "v2.3",    "NexusTeam", enabled = true),
@@ -73,6 +79,23 @@ fun ModsScreen(
             ResourcePack("3", "Default Tweaked", "1.x",    priority = 3),
         )
     }
+
+    // Sync enabled state from DataStore on first load
+    LaunchedEffect(savedModsEnabled) {
+        if (savedModsEnabled.isNotEmpty()) {
+            mods.forEachIndexed { i, mod ->
+                mods[i] = mod.copy(enabled = savedModsEnabled.contains(mod.id))
+            }
+        }
+    }
+    LaunchedEffect(savedPacksEnabled) {
+        if (savedPacksEnabled.isNotEmpty()) {
+            resourcePacks.forEachIndexed { i, pack ->
+                resourcePacks[i] = pack.copy(enabled = savedPacksEnabled.contains(pack.id))
+            }
+        }
+    }
+
     var selectedTab by remember { mutableStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
     val tabs = listOf("Instalados", "Downloads", "Pacotes de Textura")
@@ -110,7 +133,10 @@ fun ModsScreen(
                             }
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 if (mod.needsUpdate) Box(modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(NexusOrange.copy(0.15f)).clickable { mods[idx] = mod.copy(needsUpdate = false, version = "${mod.version}+1") }.padding(horizontal = 8.dp, vertical = 4.dp)) { Text("⬆", color = NexusOrange, fontSize = 12.sp) }
-                                Switch(checked = mod.enabled, onCheckedChange = { mods[idx] = mod.copy(enabled = it) }, colors = SwitchDefaults.colors(checkedThumbColor = NexusCyan, checkedTrackColor = NexusCyan.copy(0.4f)))
+                                Switch(checked = mod.enabled, onCheckedChange = { enabled ->
+                                    mods[idx] = mod.copy(enabled = enabled)
+                                    vm?.updateModsEnabled(mods.filter { it.enabled }.map { it.id }.toSet())
+                                }, colors = SwitchDefaults.colors(checkedThumbColor = NexusCyan, checkedTrackColor = NexusCyan.copy(0.4f)))
                             }
                         }
                         if (idx < mods.size - 1) Divider(color = Color(0xFF1A1A28), thickness = 1.dp)
@@ -140,7 +166,7 @@ fun ModsScreen(
                             }
                         }
                     }
-                    if (filtered.isEmpty()) Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Text("Nenhum resultado para "$searchQuery"", color = TextSecondary, fontSize = 12.sp) }
+                    if (filtered.isEmpty()) Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Text("Nenhum resultado para \"$searchQuery\"", color = TextSecondary, fontSize = 12.sp) }
                 }
             }
             2 -> {
@@ -152,7 +178,10 @@ fun ModsScreen(
                                 Box(Modifier.size(40.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFF7B61FF).copy(0.15f)).border(1.dp, Color(0xFF7B61FF).copy(0.3f), RoundedCornerShape(6.dp)), contentAlignment = Alignment.Center) { Text("🎨", fontSize = 18.sp) }
                                 Column { Text(pack.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold); Text("${pack.version} · Prioridade ${pack.priority}", color = TextSecondary, fontSize = 10.sp) }
                             }
-                            Switch(checked = pack.enabled, onCheckedChange = { resourcePacks[idx] = pack.copy(enabled = it) }, colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF7B61FF), checkedTrackColor = Color(0xFF7B61FF).copy(0.4f)))
+                            Switch(checked = pack.enabled, onCheckedChange = { enabled ->
+                                resourcePacks[idx] = pack.copy(enabled = enabled)
+                                vm?.updateResourcePacksEnabled(resourcePacks.filter { it.enabled }.map { it.id }.toSet())
+                            }, colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF7B61FF), checkedTrackColor = Color(0xFF7B61FF).copy(0.4f)))
                         }
                         if (idx < resourcePacks.size - 1) Divider(color = Color(0xFF1A1A28), thickness = 1.dp)
                     }

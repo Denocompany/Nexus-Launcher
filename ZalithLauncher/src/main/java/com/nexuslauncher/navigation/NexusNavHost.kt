@@ -1,10 +1,12 @@
 package com.nexuslauncher.navigation
 
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.nexuslauncher.datastore.NexusDataStore
 import com.nexuslauncher.ui.AccountsScreen
 import com.nexuslauncher.ui.HomeScreen
 import com.nexuslauncher.ui.InstancesScreen
@@ -14,11 +16,14 @@ import com.nexuslauncher.ui.ReportsScreen
 import com.nexuslauncher.ui.SettingsScreen
 import com.nexuslauncher.ui.VisualScreen
 import com.nexuslauncher.ui.solar.SolarSystemScreen
+import com.nexuslauncher.viewmodel.HomeViewModel
+import com.nexuslauncher.viewmodel.InstancesViewModel
 
 @Composable
 fun NexusNavHost(
-    navController: NavHostController,
-    modifier: Modifier = Modifier
+    navController  : NavHostController,
+    nexusDataStore : NexusDataStore,
+    modifier       : Modifier = Modifier
 ) {
     NavHost(
         navController    = navController,
@@ -27,6 +32,7 @@ fun NexusNavHost(
     ) {
         composable(NexusRoute.SolarSystem.route) {
             SolarSystemScreen(
+                nexusDataStore   = nexusDataStore,
                 onPlanetSelected = { planet ->
                     when (planet) {
                         PlanetId.NEXUS_PRIME    -> navController.navigate(NexusRoute.Home.route)
@@ -43,7 +49,10 @@ fun NexusNavHost(
         }
 
         composable(NexusRoute.Home.route) {
+            val homeVm: HomeViewModel = viewModel(factory = HomeViewModel.factory(nexusDataStore))
+            val lastInstance by homeVm.lastInstance.collectAsState()
             HomeScreen(
+                instanceName     = lastInstance.ifEmpty { "Survival 1.18.1" },
                 onConfigInstance = { navController.navigate(NexusRoute.Instances.route) },
                 onManageInstance = { navController.navigate(NexusRoute.Instances.route) },
                 onBoost          = { navController.navigate(NexusRoute.Performance.route) },
@@ -64,6 +73,7 @@ fun NexusNavHost(
 
         composable(NexusRoute.Performance.route) {
             PerformanceScreen(
+                nexusDataStore         = nexusDataStore,
                 onOpenReports          = { navController.navigate(NexusRoute.Reports.route) },
                 onOpenAdvancedSettings = { navController.navigate(NexusRoute.Settings.route) },
                 onBackToSolar          = {
@@ -76,6 +86,7 @@ fun NexusNavHost(
 
         composable(NexusRoute.Visual.route) {
             VisualScreen(
+                nexusDataStore       = nexusDataStore,
                 onOpenSettings       = { navController.navigate(NexusRoute.Settings.route) },
                 onOpenModsForShaders = { navController.navigate(NexusRoute.Mods.route) },
                 onBackToSolar        = {
@@ -88,6 +99,7 @@ fun NexusNavHost(
 
         composable(NexusRoute.Mods.route) {
             ModsScreen(
+                nexusDataStore    = nexusDataStore,
                 onBackToInstances = { navController.navigate(NexusRoute.Instances.route) },
                 onOpenVisual      = { navController.navigate(NexusRoute.Visual.route) },
                 onBackToSolar     = {
@@ -99,6 +111,7 @@ fun NexusNavHost(
         }
 
         composable(NexusRoute.Instances.route) {
+            val instancesVm: InstancesViewModel = viewModel(factory = InstancesViewModel.factory(nexusDataStore))
             InstancesScreen(
                 onManageMods        = { navController.navigate(NexusRoute.Mods.route) },
                 onChangeDirectories = { navController.navigate(NexusRoute.Settings.route) },
@@ -124,9 +137,10 @@ fun NexusNavHost(
 
         composable(NexusRoute.Accounts.route) {
             AccountsScreen(
-                onBackToHome  = { navController.navigate(NexusRoute.Home.route) },
-                onGoInstances = { navController.navigate(NexusRoute.Instances.route) },
-                onBackToSolar = {
+                nexusDataStore = nexusDataStore,
+                onBackToHome   = { navController.navigate(NexusRoute.Home.route) },
+                onGoInstances  = { navController.navigate(NexusRoute.Instances.route) },
+                onBackToSolar  = {
                     navController.navigate(NexusRoute.SolarSystem.route) {
                         popUpTo(NexusRoute.SolarSystem.route) { inclusive = true }
                     }
@@ -136,6 +150,7 @@ fun NexusNavHost(
 
         composable(NexusRoute.Settings.route) {
             SettingsScreen(
+                nexusDataStore       = nexusDataStore,
                 onOpenVisualSettings = { navController.navigate(NexusRoute.Visual.route) },
                 onOpenReports        = { navController.navigate(NexusRoute.Reports.route) },
                 onBackToSolar        = {

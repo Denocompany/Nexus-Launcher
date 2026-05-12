@@ -19,38 +19,33 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nexuslauncher.datastore.NexusDataStore
 import com.nexuslauncher.navigation.PlanetId
+import com.nexuslauncher.viewmodel.SolarViewModel
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-/**
- * SolarSystemScreen — Fase 4 (NavHost).
- *
- * Recebe [onPlanetSelected] do NexusNavHost. Toda a navegação entre telas
- * e o gerenciamento do back-stack ficam no NavHost — esta tela só exibe
- * o mapa do Sistema Solar e notifica qual planeta foi tocado.
- *
- * Não há mais `currentScreen` interno. Não há mais renderização de telas
- * filhas aqui. ConcurrentModificationException eliminado: a lista
- * [planetHitAreas] é limpa e reescrita em cada frame dentro do Canvas,
- * sempre na thread de composição.
- */
 @Composable
 fun SolarSystemScreen(
+    nexusDataStore  : NexusDataStore? = null,
     vm: SolarSystemViewModel = viewModel(),
     onPlanetSelected: (PlanetId) -> Unit = {}
 ) {
+    val solarVm: SolarViewModel? = nexusDataStore?.let {
+        viewModel(factory = SolarViewModel.factory(it))
+    }
+
     val metrics    by vm.systemMetrics.collectAsState()
     val tierResult by vm.tierResult.collectAsState()
 
-    // Mapeamento de IDs de string dos planetas para o enum PlanetId
     val planetIdMap = remember {
         mapOf(
             "nexus"      to PlanetId.NEXUS_PRIME,
@@ -67,7 +62,6 @@ fun SolarSystemScreen(
         )
     }
 
-    // Lista de áreas de hit dos planetas — recriada a cada frame no Canvas
     val planetHitAreas = remember { mutableListOf<Triple<String, Float, Float>>() }
 
     val infiniteTransition = rememberInfiniteTransition(label = "solar")
@@ -80,7 +74,6 @@ fun SolarSystemScreen(
 
     Box(Modifier.fillMaxSize()) {
 
-        // Fundo espacial
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -119,7 +112,10 @@ fun SolarSystemScreen(
                             sqrt(dx * dx + dy * dy) < 80f
                         }
                         hit?.let { (id, _, _) ->
-                            planetIdMap[id]?.let { planetId -> onPlanetSelected(planetId) }
+                            planetIdMap[id]?.let { planetId ->
+                                solarVm?.updateLastPlanet(id)
+                                onPlanetSelected(planetId)
+                            }
                         }
                     }
                 }
@@ -134,7 +130,6 @@ fun SolarSystemScreen(
             textPaintName.textSize = (12f * scale * 80f).coerceIn(22f, 38f)
             textPaintDesc.textSize = (9f  * scale * 80f).coerceIn(16f, 28f)
 
-            // Névoas procedurais
             val nebulaPaint = android.graphics.Paint().apply { isAntiAlias = true }
             listOf(
                 Triple(cx - w * 0.2f,  cy - h * 0.25f, "#1E0040"),
@@ -152,10 +147,11 @@ fun SolarSystemScreen(
                     android.graphics.Shader.TileMode.CLAMP
                 )
                 nebulaPaint.shader = shader
-                drawContext.canvas.nativeCanvas.drawCircle(nx, ny, nRadius, nebulaPaint)
+                drawIntoCanvas { c ->
+                    c.nativeCanvas.drawCircle(nx, ny, nRadius, nebulaPaint)
+                }
             }
 
-            // Órbitas
             SolarSystem.PLANETS.forEach { planet ->
                 val rx = planet.orbitRadius * scale
                 val ry = rx * 0.40f
@@ -167,7 +163,6 @@ fun SolarSystemScreen(
                 )
             }
 
-            // Sol (Núcleo Nexus)
             val sunPulse = 1f + sin(t * 1.5f) * 0.04f
             val sunR     = 52f * scale * sunPulse
             repeat(4) { i ->
@@ -180,7 +175,10 @@ fun SolarSystemScreen(
             drawCircle(color = Color(0xFFFFCC00), radius = sunR * 1.1f, center = Offset(cx, cy))
             drawCircle(color = Color(0xFFFFB300), radius = sunR,         center = Offset(cx, cy))
             drawCircle(color = Color(0xFFFF8F00), radius = sunR * 0.7f,  center = Offset(cx, cy))
-            drawContext.canvas.nativeCanvas.drawText("NÚCLEO NEXUS", cx, cy - sunR - 10f, textPaintName)
+
+            drawIntoCanvas { c ->
+                c.nativeCanvas.drawText("NUCLEO NEXUS", cx, cy - sunR - 10f, textPaintName)
+            }
 
             val metricPaint = NativePaint().apply {
                 color       = android.graphics.Color.argb(200, 0, 229, 255)
@@ -188,12 +186,13 @@ fun SolarSystemScreen(
                 isAntiAlias = true
                 textSize    = textPaintDesc.textSize * 0.9f
             }
-            drawContext.canvas.nativeCanvas.drawText(
-                "CPU ${metrics.cpuPercent}%   FPS ${metrics.fpsCurrent}   GPU ${metrics.gpuPercent}%",
-                cx, cy + sunR + 26f, metricPaint
-            )
+            drawIntoCanvas { c ->
+                c.nativeCanvas.drawText(
+                    "CPU ${metrics.cpuPercent}%   FPS ${metrics.fpsCurrent}   GPU ${metrics.gpuPercent}%",
+                    cx, cy + sunR + 26f, metricPaint
+                )
+            }
 
-            // Planetas
             planetHitAreas.clear()
             SolarSystem.PLANETS.forEach { planet ->
                 val angle = t * planet.orbitSpeed
@@ -216,12 +215,13 @@ fun SolarSystemScreen(
                 )
 
                 textPaintName.color = planet.color.toArgb()
-                drawContext.canvas.nativeCanvas.drawText(planet.name,        px, py - pr - 14f, textPaintName)
-                drawContext.canvas.nativeCanvas.drawText(planet.description, px, py + pr + 20f, textPaintDesc)
+                drawIntoCanvas { c ->
+                    c.nativeCanvas.drawText(planet.name,        px, py - pr - 14f, textPaintName)
+                    c.nativeCanvas.drawText(planet.description, px, py + pr + 20f, textPaintDesc)
+                }
             }
         }
 
-        // Barra de status — topo
         Row(
             Modifier
                 .fillMaxWidth()
@@ -232,7 +232,7 @@ fun SolarSystemScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             androidx.compose.material.Text(
-                "⚡ NEXUS LAUNCHER — SISTEMA SOLAR",
+                "NEXUS LAUNCHER — SISTEMA SOLAR",
                 color         = Color(0xFF00E5FF),
                 fontWeight    = FontWeight.Black,
                 fontSize      = 13.sp,
@@ -246,7 +246,6 @@ fun SolarSystemScreen(
             )
         }
 
-        // Barra de status — rodapé
         Row(
             Modifier
                 .fillMaxWidth()
@@ -258,13 +257,13 @@ fun SolarSystemScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             androidx.compose.material.Text(
-                "🚀 Nexus Boost   🎨 Shaders HDR Ativado   🧩 Mods Ativos: 5   📊 Relatório FPS",
+                "Nexus Boost   Shaders HDR Ativado   Mods Ativos: 5   Relatorio FPS",
                 color    = Color.White.copy(alpha = 0.45f),
                 fontSize = 9.sp
             )
             tierResult?.let {
                 androidx.compose.material.Text(
-                    "${it.tier.label} · v1.4.2.0",
+                    "${it.tier.label} · v1.5.0.0",
                     color    = Color.White.copy(alpha = 0.3f),
                     fontSize = 9.sp
                 )

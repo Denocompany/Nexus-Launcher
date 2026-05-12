@@ -21,42 +21,64 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nexuslauncher.datastore.NexusDataStore
 import com.nexuslauncher.ui.theme.DeepVoid
 import com.nexuslauncher.ui.theme.NexusCyan
 import com.nexuslauncher.ui.theme.NexusOrange
 import com.nexuslauncher.ui.theme.Obsidian
 import com.nexuslauncher.ui.theme.TextSecondary
+import com.nexuslauncher.viewmodel.SettingsViewModel
 
-/**
- * SettingsScreen — HELIOS CONTROL (Fase 4 / NavHost).
- * Callbacks explícitos: onOpenVisualSettings, onOpenReports, onBackToSolar.
- */
 @Composable
 fun SettingsScreen(
+    nexusDataStore      : NexusDataStore? = null,
     onOpenVisualSettings: () -> Unit = {},
     onOpenReports       : () -> Unit = {},
     onBackToSolar       : () -> Unit = {}
 ) {
-    var language         by remember { mutableStateOf("Português (Brasil)") }
-    var autoSave         by remember { mutableStateOf(true) }
-    var crashReport      by remember { mutableStateOf(true) }
-    var fullscreen       by remember { mutableStateOf(false) }
-    var vsync            by remember { mutableStateOf(true) }
-    var selectedRes      by remember { mutableStateOf(0) }
+    val vm: SettingsViewModel? = nexusDataStore?.let {
+        viewModel(factory = SettingsViewModel.factory(it))
+    }
+
+    val savedLanguage        by (vm?.language        ?: kotlinx.coroutines.flow.flowOf("Português (Brasil)")).collectAsState(initial = "Português (Brasil)")
+    val savedAutoSave        by (vm?.autoSave         ?: kotlinx.coroutines.flow.flowOf(true)).collectAsState(initial = true)
+    val savedCrashReport     by (vm?.crashReport      ?: kotlinx.coroutines.flow.flowOf(true)).collectAsState(initial = true)
+    val savedFullscreen      by (vm?.fullscreen       ?: kotlinx.coroutines.flow.flowOf(false)).collectAsState(initial = false)
+    val savedVsync           by (vm?.vsync            ?: kotlinx.coroutines.flow.flowOf(true)).collectAsState(initial = true)
+    val savedResolution      by (vm?.resolution       ?: kotlinx.coroutines.flow.flowOf(0)).collectAsState(initial = 0)
+    val savedTouchSens       by (vm?.touchSens        ?: kotlinx.coroutines.flow.flowOf(1)).collectAsState(initial = 1)
+    val savedHaptic          by (vm?.haptic           ?: kotlinx.coroutines.flow.flowOf(true)).collectAsState(initial = true)
+    val savedGamepad         by (vm?.gamepad          ?: kotlinx.coroutines.flow.flowOf(false)).collectAsState(initial = false)
+    val savedBgLoad          by (vm?.bgLoad           ?: kotlinx.coroutines.flow.flowOf(true)).collectAsState(initial = true)
+    val savedAutoUpdate      by (vm?.autoUpdate       ?: kotlinx.coroutines.flow.flowOf(true)).collectAsState(initial = true)
+    val savedTelemetry       by (vm?.telemetry        ?: kotlinx.coroutines.flow.flowOf(false)).collectAsState(initial = false)
+    val savedTheme           by (vm?.settingsTheme    ?: kotlinx.coroutines.flow.flowOf(0)).collectAsState(initial = 0)
+    val savedNexusAI         by (vm?.nexusAI          ?: kotlinx.coroutines.flow.flowOf(false)).collectAsState(initial = false)
+    val savedPredictiveBoost by (vm?.predictiveBoost  ?: kotlinx.coroutines.flow.flowOf(false)).collectAsState(initial = false)
+    val savedGpuOverclock    by (vm?.gpuOverclock     ?: kotlinx.coroutines.flow.flowOf(false)).collectAsState(initial = false)
+    val savedBeta            by (vm?.beta             ?: kotlinx.coroutines.flow.flowOf(false)).collectAsState(initial = false)
+
+    var language         by remember(savedLanguage)        { mutableStateOf(savedLanguage) }
+    var autoSave         by remember(savedAutoSave)        { mutableStateOf(savedAutoSave) }
+    var crashReport      by remember(savedCrashReport)     { mutableStateOf(savedCrashReport) }
+    var fullscreen       by remember(savedFullscreen)      { mutableStateOf(savedFullscreen) }
+    var vsync            by remember(savedVsync)           { mutableStateOf(savedVsync) }
+    var selectedRes      by remember(savedResolution)      { mutableStateOf(savedResolution) }
     val resolutions = listOf("1280x720", "1920x1080", "2560x1440", "Nativa do dispositivo")
-    var touchSensitivity by remember { mutableStateOf(1) }
+    var touchSensitivity by remember(savedTouchSens)       { mutableStateOf(savedTouchSens) }
     val sensitivityLabels = listOf("Baixa", "Média", "Alta", "Máxima")
-    var hapticFeedback   by remember { mutableStateOf(true) }
-    var gamepadSupport   by remember { mutableStateOf(false) }
-    var bgLoad           by remember { mutableStateOf(true) }
-    var autoUpdate       by remember { mutableStateOf(true) }
-    var analytics        by remember { mutableStateOf(false) }
-    var selectedTheme    by remember { mutableStateOf(0) }
+    var hapticFeedback   by remember(savedHaptic)          { mutableStateOf(savedHaptic) }
+    var gamepadSupport   by remember(savedGamepad)         { mutableStateOf(savedGamepad) }
+    var bgLoad           by remember(savedBgLoad)          { mutableStateOf(savedBgLoad) }
+    var autoUpdate       by remember(savedAutoUpdate)      { mutableStateOf(savedAutoUpdate) }
+    var analytics        by remember(savedTelemetry)       { mutableStateOf(savedTelemetry) }
+    var selectedTheme    by remember(savedTheme)           { mutableStateOf(savedTheme) }
     val themes = listOf("Nexus Dark", "Deep Space", "Aetherion")
-    var nexusAI          by remember { mutableStateOf(false) }
-    var predictiveBoost  by remember { mutableStateOf(false) }
-    var gpuOverclock     by remember { mutableStateOf(false) }
-    var betaFeatures     by remember { mutableStateOf(false) }
+    var nexusAI          by remember(savedNexusAI)         { mutableStateOf(savedNexusAI) }
+    var predictiveBoost  by remember(savedPredictiveBoost) { mutableStateOf(savedPredictiveBoost) }
+    var gpuOverclock     by remember(savedGpuOverclock)    { mutableStateOf(savedGpuOverclock) }
+    var betaFeatures     by remember(savedBeta)            { mutableStateOf(savedBeta) }
     var jvmArgs          by remember { mutableStateOf("-XX:+UseG1GC -Xmx4G") }
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("Jogo", "Vídeo", "Controles", "Launcher", "Experimental", "Arquivos", "Sobre")
@@ -80,15 +102,15 @@ fun SettingsScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf("Português (Brasil)", "English (US)", "Español").forEachIndexed { i, lang ->
                             val sel = language == lang
-                            Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (sel) NexusCyan.copy(0.15f) else Color(0xFF111120)).border(1.dp, if (sel) NexusCyan else TextSecondary.copy(0.3f), RoundedCornerShape(6.dp)).clickable { language = lang }.padding(horizontal = 8.dp, vertical = 5.dp)) { Text(lang, color = if (sel) NexusCyan else TextSecondary, fontSize = 9.sp) }
+                            Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (sel) NexusCyan.copy(0.15f) else Color(0xFF111120)).border(1.dp, if (sel) NexusCyan else TextSecondary.copy(0.3f), RoundedCornerShape(6.dp)).clickable { language = lang; vm?.setLanguage(lang) }.padding(horizontal = 8.dp, vertical = 5.dp)) { Text(lang, color = if (sel) NexusCyan else TextSecondary, fontSize = 9.sp) }
                         }
                     }
                 }
                 Spacer(Modifier.height(12.dp))
                 SettingsSection("⚙ Comportamento") {
-                    ToggleSettingsRow("Salvar automaticamente", autoSave)      { autoSave    = it }
+                    ToggleSettingsRow("Salvar automaticamente", autoSave)      { autoSave    = it; vm?.setAutoSave(it) }
                     Divider(color = Color(0xFF1A1A28))
-                    ToggleSettingsRow("Enviar relatório de crash", crashReport) { crashReport = it }
+                    ToggleSettingsRow("Enviar relatório de crash", crashReport) { crashReport = it; vm?.setCrashReport(it) }
                 }
                 Spacer(Modifier.height(12.dp))
                 SettingsSection("☕ Java") {
@@ -100,13 +122,13 @@ fun SettingsScreen(
             }
             1 -> {
                 SettingsSection("🖥 Resolução & Modo") {
-                    ToggleSettingsRow("Tela cheia", fullscreen) { fullscreen = it }; Divider(color = Color(0xFF1A1A28))
-                    ToggleSettingsRow("V-Sync", vsync) { vsync = it }
+                    ToggleSettingsRow("Tela cheia", fullscreen) { fullscreen = it; vm?.setFullscreen(it) }; Divider(color = Color(0xFF1A1A28))
+                    ToggleSettingsRow("V-Sync", vsync) { vsync = it; vm?.setVsync(it) }
                     Spacer(Modifier.height(10.dp))
                     Text("Resolução", color = TextSecondary, fontSize = 11.sp); Spacer(Modifier.height(6.dp))
                     resolutions.forEachIndexed { i, res ->
                         val sel = selectedRes == i
-                        Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (sel) NexusCyan.copy(0.1f) else Color.Transparent).border(1.dp, if (sel) NexusCyan else Color(0xFF1A1A28), RoundedCornerShape(6.dp)).clickable { selectedRes = i }.padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (sel) NexusCyan.copy(0.1f) else Color.Transparent).border(1.dp, if (sel) NexusCyan else Color(0xFF1A1A28), RoundedCornerShape(6.dp)).clickable { selectedRes = i; vm?.setResolution(i) }.padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(res, color = if (sel) NexusCyan else Color.White, fontSize = 12.sp)
                             if (sel) Text("✓", color = NexusCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
@@ -126,12 +148,12 @@ fun SettingsScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         sensitivityLabels.forEachIndexed { i, label ->
                             val sel = touchSensitivity == i
-                            Box(Modifier.weight(1f).clip(RoundedCornerShape(6.dp)).background(if (sel) NexusCyan.copy(0.15f) else Color(0xFF111120)).border(1.dp, if (sel) NexusCyan else TextSecondary.copy(0.3f), RoundedCornerShape(6.dp)).clickable { touchSensitivity = i }.padding(vertical = 8.dp), contentAlignment = Alignment.Center) { Text(label, color = if (sel) NexusCyan else TextSecondary, fontSize = 10.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal) }
+                            Box(Modifier.weight(1f).clip(RoundedCornerShape(6.dp)).background(if (sel) NexusCyan.copy(0.15f) else Color(0xFF111120)).border(1.dp, if (sel) NexusCyan else TextSecondary.copy(0.3f), RoundedCornerShape(6.dp)).clickable { touchSensitivity = i; vm?.setTouchSens(i) }.padding(vertical = 8.dp), contentAlignment = Alignment.Center) { Text(label, color = if (sel) NexusCyan else TextSecondary, fontSize = 10.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal) }
                         }
                     }
                     Spacer(Modifier.height(12.dp))
-                    ToggleSettingsRow("Feedback háptico (vibração)", hapticFeedback) { hapticFeedback = it }; Divider(color = Color(0xFF1A1A28))
-                    ToggleSettingsRow("Suporte a controle gamepad", gamepadSupport) { gamepadSupport = it }
+                    ToggleSettingsRow("Feedback háptico (vibração)", hapticFeedback) { hapticFeedback = it; vm?.setHaptic(it) }; Divider(color = Color(0xFF1A1A28))
+                    ToggleSettingsRow("Suporte a controle gamepad", gamepadSupport)  { gamepadSupport = it; vm?.setGamepad(it) }
                 }
                 Spacer(Modifier.height(12.dp))
                 SettingsSection("⌨ Mapeamento de Teclas") {
@@ -145,15 +167,15 @@ fun SettingsScreen(
             }
             3 -> {
                 SettingsSection("🚀 Inicialização") {
-                    ToggleSettingsRow("Carregar em background", bgLoad)           { bgLoad     = it }; Divider(color = Color(0xFF1A1A28))
-                    ToggleSettingsRow("Atualizações automáticas", autoUpdate)     { autoUpdate = it }; Divider(color = Color(0xFF1A1A28))
-                    ToggleSettingsRow("Enviar telemetria anônima", analytics)     { analytics  = it }
+                    ToggleSettingsRow("Carregar em background", bgLoad)           { bgLoad     = it; vm?.setBgLoad(it) }; Divider(color = Color(0xFF1A1A28))
+                    ToggleSettingsRow("Atualizações automáticas", autoUpdate)     { autoUpdate = it; vm?.setAutoUpdate(it) }; Divider(color = Color(0xFF1A1A28))
+                    ToggleSettingsRow("Enviar telemetria anônima", analytics)     { analytics  = it; vm?.setTelemetry(it) }
                 }
                 Spacer(Modifier.height(12.dp))
                 SettingsSection("🎨 Tema do Launcher") {
                     themes.forEachIndexed { i, theme ->
                         val sel = selectedTheme == i
-                        Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (sel) NexusCyan.copy(0.1f) else Color.Transparent).clickable { selectedTheme = i }.padding(horizontal = 8.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (sel) NexusCyan.copy(0.1f) else Color.Transparent).clickable { selectedTheme = i; vm?.setSettingsTheme(i) }.padding(horizontal = 8.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text(theme, color = if (sel) NexusCyan else Color.White, fontSize = 13.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
                             if (sel) Text("✓", color = NexusCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
@@ -172,10 +194,10 @@ fun SettingsScreen(
                 Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(NexusOrange.copy(0.1f)).border(1.dp, NexusOrange.copy(0.4f), RoundedCornerShape(8.dp)).padding(12.dp)) { Text("⚠ Recursos experimentais podem causar instabilidade. Use com cautela.", color = NexusOrange, fontSize = 11.sp) }
                 Spacer(Modifier.height(12.dp))
                 SettingsSection("🧪 Features em Teste") {
-                    ToggleSettingsRow("Nexus AI (análise preditiva de lag)", nexusAI)         { nexusAI         = it }; Divider(color = Color(0xFF1A1A28))
-                    ToggleSettingsRow("Nexus Boost preditivo",              predictiveBoost)  { predictiveBoost = it }; Divider(color = Color(0xFF1A1A28))
-                    ToggleSettingsRow("GPU Overclock (root necessário)",     gpuOverclock)     { gpuOverclock    = it }; Divider(color = Color(0xFF1A1A28))
-                    ToggleSettingsRow("Acesso antecipado (Beta)",            betaFeatures)     { betaFeatures    = it }
+                    ToggleSettingsRow("Nexus AI (análise preditiva de lag)", nexusAI)         { nexusAI         = it; vm?.setNexusAI(it) }; Divider(color = Color(0xFF1A1A28))
+                    ToggleSettingsRow("Nexus Boost preditivo",              predictiveBoost)  { predictiveBoost = it; vm?.setPredictiveBoost(it) }; Divider(color = Color(0xFF1A1A28))
+                    ToggleSettingsRow("GPU Overclock (root necessário)",     gpuOverclock)     { gpuOverclock    = it; vm?.setGpuOverclock(it) }; Divider(color = Color(0xFF1A1A28))
+                    ToggleSettingsRow("Acesso antecipado (Beta)",            betaFeatures)     { betaFeatures    = it; vm?.setBeta(it) }
                 }
                 if (betaFeatures) { Spacer(Modifier.height(8.dp)); Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF00E676).copy(0.08f)).border(1.dp, Color(0xFF00E676).copy(0.3f), RoundedCornerShape(8.dp)).padding(12.dp)) { Text("✓ Beta ativado. Atualizações de teste serão disponibilizadas automaticamente.", color = Color(0xFF00E676), fontSize = 11.sp) } }
             }
@@ -198,14 +220,11 @@ fun SettingsScreen(
                 Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Obsidian).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("⚡", fontSize = 40.sp); Spacer(Modifier.height(8.dp))
                     Text("NEXUS LAUNCHER", color = NexusCyan, fontSize = 18.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
-                    Text("Versão 1.4.2.0 · Build 43", color = TextSecondary, fontSize = 12.sp)
+                    Text("Versão 1.5.0.0 · Build 50", color = TextSecondary, fontSize = 12.sp)
                     Spacer(Modifier.height(20.dp)); Divider(color = Color(0xFF1A1A28)); Spacer(Modifier.height(16.dp))
-                    listOf("Desenvolvedor" to "Nexus Team", "Plataforma" to "Android 8.0+", "Kotlin" to "2.0.21", "Jetpack Compose" to "2024.04.01 BOM", "Navigation" to "2.7.7", "Base" to "ZalithLauncher 1.3.x", "Licença" to "GPL-3.0").forEach { (k, v) ->
+                    listOf("Desenvolvedor" to "Nexus Team", "Plataforma" to "Android 8.0+", "Kotlin" to "2.0.21", "Jetpack Compose" to "2024.04.01 BOM", "Navigation" to "2.7.7", "DataStore" to "1.0.0", "Base" to "ZalithLauncher 1.3.x", "Licença" to "GPL-3.0").forEach { (k, v) ->
                         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(k, color = TextSecondary, fontSize = 12.sp); Text(v, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium) }
                     }
-                    Spacer(Modifier.height(16.dp)); Divider(color = Color(0xFF1A1A28)); Spacer(Modifier.height(16.dp))
-                    Text("© 2025 Nexus Team. Todos os direitos reservados.", color = TextSecondary.copy(0.5f), fontSize = 10.sp)
-                    Text("Minecraft é marca registrada da Mojang Studios.", color = TextSecondary.copy(0.3f), fontSize = 10.sp)
                 }
             }
         }
@@ -213,23 +232,25 @@ fun SettingsScreen(
 }
 
 @Composable private fun TabPill(label: String, selected: Boolean, onClick: () -> Unit) {
-    Box(modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(if (selected) NexusCyan.copy(0.15f) else Color(0xFF111120)).border(1.dp, if (selected) NexusCyan else Color.Transparent, RoundedCornerShape(20.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 6.dp)) {
-        Text(label, color = if (selected) NexusCyan else TextSecondary, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+    Box(modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(if (selected) NexusCyan.copy(0.15f) else Color(0xFF111120)).border(1.dp, if (selected) NexusCyan else Color.Transparent, RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 6.dp)) {
+        Text(label, color = if (selected) NexusCyan else TextSecondary, fontSize = 10.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
     }
 }
 @Composable private fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Obsidian).padding(14.dp)) {
-        Text(title, color = NexusCyan, fontSize = 13.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.height(12.dp)); content()
+        Text(title, color = NexusCyan, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp)); content()
     }
 }
 @Composable private fun SettingsRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = TextSecondary, fontSize = 12.sp); Text(value, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = TextSecondary, fontSize = 12.sp)
+        Text(value,  color = Color.White,   fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
 @Composable private fun ToggleSettingsRow(label: String, checked: Boolean, onToggle: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        Text(label, color = Color.White, fontSize = 13.sp)
         Switch(checked = checked, onCheckedChange = onToggle, colors = SwitchDefaults.colors(checkedThumbColor = NexusCyan, checkedTrackColor = NexusCyan.copy(0.4f)))
     }
 }
