@@ -26,15 +26,27 @@ import com.nexuslauncher.ui.theme.Obsidian
 import com.nexuslauncher.ui.theme.TextSecondary
 
 /**
- * HomeScreen — NEXUS PRIME (Fase 4).
- * Todos os botões e atalhos rápidos navegam para o planeta correspondente.
+ * HomeScreen — NEXUS PRIME (Fase 4 / NavHost).
+ *
+ * Callbacks explícitos substituem o genérico onNavigateTo(String).
+ * O botão ArrowBack / onBackToSolar navega de volta ao Sistema Solar.
  */
 @Composable
 fun HomeScreen(
-    instanceName : String = "Survival 1.18.1",
-    metrics      : NexusSystemMonitor.SystemMetrics = NexusSystemMonitor.SystemMetrics(),
-    onLaunchGame : () -> Unit = {},
-    onNavigateTo : (String) -> Unit = {}
+    instanceName    : String                             = "Survival 1.18.1",
+    metrics         : NexusSystemMonitor.SystemMetrics   = NexusSystemMonitor.SystemMetrics(),
+    onLaunchGame    : () -> Unit = {},
+    onConfigInstance: () -> Unit = {},
+    onManageInstance: () -> Unit = {},
+    onBoost         : () -> Unit = {},
+    onTextures      : () -> Unit = {},
+    onMods          : () -> Unit = {},
+    onReports       : () -> Unit = {},
+    onGoInstances   : () -> Unit = {},
+    onGoAccounts    : () -> Unit = {},
+    onGoVisual      : () -> Unit = {},
+    onGoSettings    : () -> Unit = {},
+    onBackToSolar   : () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -54,9 +66,9 @@ fun HomeScreen(
         ) {
             Text(
                 "⚡ NEXUS PRIME",
-                color      = NexusCyan,
-                fontWeight = FontWeight.Black,
-                fontSize   = 15.sp,
+                color         = NexusCyan,
+                fontWeight    = FontWeight.Black,
+                fontSize      = 15.sp,
                 letterSpacing = 2.sp
             )
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -68,15 +80,11 @@ fun HomeScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // ── Linha principal: 3 cards ──────────────────────────────────────
+        // ── Linha principal: 3 cards ─────────────────────────────────────
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp),
+            modifier              = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-
-            // Card Esquerdo — Última Instância
             NexusHomeCard(modifier = Modifier.weight(1f)) {
                 Text("ÚLTIMA INSTÂNCIA", color = NexusCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 Spacer(Modifier.height(10.dp))
@@ -84,16 +92,15 @@ fun HomeScreen(
                 Text("Shaders Ativos", color = TextSecondary, fontSize = 11.sp)
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SmallActionButton("Configurar") { onNavigateTo("instarrion") }
-                    SmallActionButton("Gerenciar")  { onNavigateTo("instarrion") }
+                    SmallActionButton("Configurar") { onConfigInstance() }
+                    SmallActionButton("Gerenciar")  { onManageInstance() }
                 }
             }
 
-            // Card Central — INICIAR JOGO
             Column(
-                modifier                = Modifier.weight(1f),
-                horizontalAlignment     = Alignment.CenterHorizontally,
-                verticalArrangement     = Arrangement.Center
+                modifier            = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
                 Button(
                     onClick   = onLaunchGame,
@@ -106,9 +113,9 @@ fun HomeScreen(
                         Text("🚀", fontSize = 22.sp)
                         Text(
                             "INICIAR JOGO",
-                            color      = Color.White,
-                            fontWeight = FontWeight.Black,
-                            fontSize   = 13.sp,
+                            color         = Color.White,
+                            fontWeight    = FontWeight.Black,
+                            fontSize      = 13.sp,
                             letterSpacing = 1.5.sp
                         )
                     }
@@ -117,7 +124,6 @@ fun HomeScreen(
                 Text("v1.18.1 • Survival", color = TextSecondary, fontSize = 10.sp)
             }
 
-            // Card Direito — Status do Sistema
             NexusHomeCard(modifier = Modifier.weight(1f)) {
                 Text("STATUS DO SISTEMA", color = NexusCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 Spacer(Modifier.height(10.dp))
@@ -129,90 +135,57 @@ fun HomeScreen(
                 Spacer(Modifier.height(4.dp))
                 StatusRow("RAM", "${String.format("%.1f", metrics.ramGb)}/${String.format("%.0f", metrics.ramTotalGb)}GB", Color(0xFF00E676))
                 Spacer(Modifier.height(8.dp))
-                SmallActionButton("Ver Performance") { onNavigateTo("aetherion") }
+                SmallActionButton("Ver Performance") { onBoost() }
             }
         }
 
         Spacer(Modifier.height(16.dp))
 
-        // ── Atalhos Rápidos ───────────────────────────────────────────────
         Text(
             "ATALHOS RÁPIDOS",
-            color      = TextSecondary,
-            fontSize   = 10.sp,
+            color         = TextSecondary,
+            fontSize      = 10.sp,
             letterSpacing = 1.5.sp,
-            modifier   = Modifier.padding(start = 16.dp, bottom = 8.dp)
+            modifier      = Modifier.padding(start = 16.dp, bottom = 8.dp)
         )
 
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp),
+            modifier              = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            QuickCard(
-                icon     = "⚡",
-                title    = "Nexus Boost",
-                subtitle = "Otimizar agora",
-                color    = NexusCyan,
-                modifier = Modifier.weight(1f)
-            ) { onNavigateTo("aetherion") }
-
-            QuickCard(
-                icon     = "🎨",
-                title    = "Pacotes de Textura",
-                subtitle = "Shaders HDR Ativado",
-                color    = Color(0xFF7B61FF),
-                modifier = Modifier.weight(1f)
-            ) { onNavigateTo("modara") }
-
-            QuickCard(
-                icon     = "🧩",
-                title    = "Mods & Plugins",
-                subtitle = "5 ativos",
-                color    = NexusOrange,
-                modifier = Modifier.weight(1f)
-            ) { onNavigateTo("modara") }
-
-            QuickCard(
-                icon     = "📊",
-                title    = "Relatório de Desempenho",
-                subtitle = "Média: ${metrics.fpsCurrent} FPS",
-                color    = Color(0xFF00E676),
-                modifier = Modifier.weight(1f)
-            ) { onNavigateTo("chronos") }
+            QuickCard("⚡", "Nexus Boost",           "Otimizar agora",       NexusCyan,         Modifier.weight(1f)) { onBoost() }
+            QuickCard("🎨", "Pacotes de Textura",    "Shaders HDR Ativado",  Color(0xFF7B61FF), Modifier.weight(1f)) { onTextures() }
+            QuickCard("🧩", "Mods & Plugins",        "5 ativos",             NexusOrange,       Modifier.weight(1f)) { onMods() }
+            QuickCard("📊", "Relatório de Desempenho","Média: ${metrics.fpsCurrent} FPS", Color(0xFF00E676), Modifier.weight(1f)) { onReports() }
         }
 
         Spacer(Modifier.height(16.dp))
 
-        // ── Acesso rápido a planetas ──────────────────────────────────────
         Text(
             "NAVEGAÇÃO RÁPIDA",
-            color     = TextSecondary,
-            fontSize  = 10.sp,
+            color         = TextSecondary,
+            fontSize      = 10.sp,
             letterSpacing = 1.5.sp,
-            modifier  = Modifier.padding(start = 16.dp, bottom = 8.dp)
+            modifier      = Modifier.padding(start = 16.dp, bottom = 8.dp)
         )
 
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp),
+            modifier              = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             listOf(
-                Triple("🌐", "Instâncias",    "instarrion"),
-                Triple("👤", "Contas",         "persona"),
-                Triple("🖥", "Visual",          "lumina"),
-                Triple("⚙", "Configurações",  "helios"),
-            ).forEach { (icon, label, dest) ->
+                Triple("🌐", "Instâncias",    onGoInstances),
+                Triple("👤", "Contas",         onGoAccounts),
+                Triple("🖥", "Visual",          onGoVisual),
+                Triple("⚙", "Configurações",  onGoSettings),
+            ).forEach { (icon, label, action) ->
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(8.dp))
                         .background(Obsidian)
                         .border(1.dp, NexusCyan.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-                        .clickable { onNavigateTo(dest) }
+                        .clickable { action() }
                         .padding(vertical = 10.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -227,12 +200,8 @@ fun HomeScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // ── Status bar inferior ───────────────────────────────────────────
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color(0xFF080812))
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier              = Modifier.fillMaxWidth().background(Color(0xFF080812)).padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalAlignment     = Alignment.CenterVertically
         ) {

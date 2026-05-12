@@ -11,11 +11,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,31 +25,49 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.nexuslauncher.ui.AccountsScreen
-import com.nexuslauncher.ui.HomeScreen
-import com.nexuslauncher.ui.InstancesScreen
-import com.nexuslauncher.ui.ModsScreen
-import com.nexuslauncher.ui.PerformanceScreen
-import com.nexuslauncher.ui.ReportsScreen
-import com.nexuslauncher.ui.SettingsScreen
-import com.nexuslauncher.ui.VisualScreen
+import com.nexuslauncher.navigation.PlanetId
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * SolarSystemScreen — Fase 4.
- * Navegação cruzada completa: onNavigateTo permite que qualquer tela
- * navegue para qualquer outro planeta diretamente.
+ * SolarSystemScreen — Fase 4 (NavHost).
+ *
+ * Recebe [onPlanetSelected] do NexusNavHost. Toda a navegação entre telas
+ * e o gerenciamento do back-stack ficam no NavHost — esta tela só exibe
+ * o mapa do Sistema Solar e notifica qual planeta foi tocado.
+ *
+ * Não há mais `currentScreen` interno. Não há mais renderização de telas
+ * filhas aqui. ConcurrentModificationException eliminado: a lista
+ * [planetHitAreas] é limpa e reescrita em cada frame dentro do Canvas,
+ * sempre na thread de composição.
  */
 @Composable
-fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
-    val metrics     by vm.systemMetrics.collectAsState()
-    val tierResult  by vm.tierResult.collectAsState()
-    val boostReport by vm.boostReport.collectAsState()
+fun SolarSystemScreen(
+    vm: SolarSystemViewModel = viewModel(),
+    onPlanetSelected: (PlanetId) -> Unit = {}
+) {
+    val metrics    by vm.systemMetrics.collectAsState()
+    val tierResult by vm.tierResult.collectAsState()
 
-    var currentScreen by remember { mutableStateOf<String?>(null) }
+    // Mapeamento de IDs de string dos planetas para o enum PlanetId
+    val planetIdMap = remember {
+        mapOf(
+            "nexus"      to PlanetId.NEXUS_PRIME,
+            "aetherion"  to PlanetId.AETHERION,
+            "lumina"     to PlanetId.LUMINA,
+            "modara"     to PlanetId.MODARA,
+            "curseforge" to PlanetId.MODARA,
+            "instarrion" to PlanetId.INSTARRION,
+            "chronos"    to PlanetId.CHRONOS,
+            "cloudnexus" to PlanetId.CHRONOS,
+            "persona"    to PlanetId.PERSONA,
+            "labx"       to PlanetId.HELIOS_CONTROL,
+            "helios"     to PlanetId.HELIOS_CONTROL
+        )
+    }
 
+    // Lista de áreas de hit dos planetas — recriada a cada frame no Canvas
     val planetHitAreas = remember { mutableListOf<Triple<String, Float, Float>>() }
 
     val infiniteTransition = rememberInfiniteTransition(label = "solar")
@@ -65,11 +78,9 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
         label         = "time"
     )
 
-    // Navegação cruzada: qualquer tela filho pode chamar onNavigateTo("id")
-    val navigateTo: (String) -> Unit = { dest -> currentScreen = dest }
-
     Box(Modifier.fillMaxSize()) {
 
+        // Fundo espacial
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -81,231 +92,182 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
                 )
         )
 
-        if (currentScreen != null) {
-
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0xF005050A))
-            ) {
-                when (currentScreen) {
-                    "nexus"      -> HomeScreen(
-                        instanceName = "Survival 1.18.1",
-                        metrics      = metrics,
-                        onLaunchGame = { /* Manter funcionalidade original de lançamento */ },
-                        onNavigateTo = navigateTo
-                    )
-                    "aetherion"  -> PerformanceScreen(
-                        metrics      = metrics,
-                        boostReport  = boostReport,
-                        onBoost      = { vm.triggerBoost() },
-                        onNavigateTo = navigateTo
-                    )
-                    "lumina"     -> VisualScreen(onNavigateTo = navigateTo)
-                    "modara",
-                    "curseforge" -> ModsScreen(onNavigateTo = navigateTo)
-                    "instarrion" -> InstancesScreen(
-                        onLaunchGame = { /* Manter funcionalidade original */ },
-                        onNavigateTo = navigateTo
-                    )
-                    "chronos",
-                    "cloudnexus" -> ReportsScreen(onNavigateTo = navigateTo)
-                    "persona"    -> AccountsScreen(onNavigateTo = navigateTo)
-                    "labx",
-                    "helios"     -> SettingsScreen(onNavigateTo = navigateTo)
-                    else         -> HomeScreen(
-                        instanceName = "Survival 1.18.1",
-                        metrics      = metrics,
-                        onNavigateTo = navigateTo
-                    )
-                }
-
-                IconButton(
-                    onClick  = { currentScreen = null },
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(8.dp)
-                ) {
-                    Icon(
-                        imageVector        = Icons.Filled.ArrowBack,
-                        contentDescription = "Voltar ao Sistema Solar",
-                        tint               = Color(0xFF00E5FF)
-                    )
-                }
+        val textPaintName = remember {
+            NativePaint().apply {
+                color          = android.graphics.Color.WHITE
+                textAlign      = NativePaint.Align.CENTER
+                isFakeBoldText = true
+                isAntiAlias    = true
             }
-
-        } else {
-
-            val textPaintName = remember {
-                NativePaint().apply {
-                    color          = android.graphics.Color.WHITE
-                    textAlign      = NativePaint.Align.CENTER
-                    isFakeBoldText = true
-                    isAntiAlias    = true
-                }
+        }
+        val textPaintDesc = remember {
+            NativePaint().apply {
+                color       = android.graphics.Color.argb(180, 180, 220, 255)
+                textAlign   = NativePaint.Align.CENTER
+                isAntiAlias = true
             }
-            val textPaintDesc = remember {
-                NativePaint().apply {
-                    color       = android.graphics.Color.argb(180, 180, 220, 255)
-                    textAlign   = NativePaint.Align.CENTER
-                    isAntiAlias = true
-                }
-            }
+        }
 
-            Canvas(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectTapGestures { tapOffset ->
-                            val hit = planetHitAreas.firstOrNull { (_, px, py) ->
-                                val dx = tapOffset.x - px
-                                val dy = tapOffset.y - py
-                                sqrt(dx * dx + dy * dy) < 80f
-                            }
-                            hit?.let { (id, _, _) -> currentScreen = id }
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures { tapOffset ->
+                        val hit = planetHitAreas.firstOrNull { (_, px, py) ->
+                            val dx = tapOffset.x - px
+                            val dy = tapOffset.y - py
+                            sqrt(dx * dx + dy * dy) < 80f
+                        }
+                        hit?.let { (id, _, _) ->
+                            planetIdMap[id]?.let { planetId -> onPlanetSelected(planetId) }
                         }
                     }
-            ) {
-                val w     = size.width
-                val h     = size.height
-                val cx    = w / 2f
-                val cy    = h / 2f
-                val scale = minOf(w, h) / 1200f
-                val t     = time * 0.001f
-
-                textPaintName.textSize = (12f * scale * 80f).coerceIn(22f, 38f)
-                textPaintDesc.textSize = (9f  * scale * 80f).coerceIn(16f, 28f)
-
-                val nebulaPaint = android.graphics.Paint().apply { isAntiAlias = true }
-                listOf(
-                    Triple(cx - w * 0.2f, cy - h * 0.25f, "#1E0040"),
-                    Triple(cx + w * 0.25f, cy + h * 0.15f, "#001540"),
-                    Triple(cx - w * 0.1f, cy + h * 0.2f,  "#000F2A")
-                ).forEach { (nx, ny, hex) ->
-                    val nRadius = w * 0.22f
-                    val shader  = android.graphics.RadialGradient(
-                        nx, ny, nRadius,
-                        intArrayOf(
-                            android.graphics.Color.parseColor(hex) and 0x00FFFFFF or 0x28000000,
-                            android.graphics.Color.TRANSPARENT
-                        ),
-                        null,
-                        android.graphics.Shader.TileMode.CLAMP
-                    )
-                    nebulaPaint.shader = shader
-                    drawContext.canvas.nativeCanvas.drawCircle(nx, ny, nRadius, nebulaPaint)
                 }
+        ) {
+            val w     = size.width
+            val h     = size.height
+            val cx    = w / 2f
+            val cy    = h / 2f
+            val scale = minOf(w, h) / 1200f
+            val t     = time * 0.001f
 
-                SolarSystem.PLANETS.forEach { planet ->
-                    val rx = planet.orbitRadius * scale
-                    val ry = rx * 0.40f
-                    drawOval(
-                        color   = planet.color.copy(alpha = 0.12f),
-                        topLeft = Offset(cx - rx, cy - ry),
-                        size    = Size(rx * 2f, ry * 2f),
-                        style   = Stroke(width = 0.8f)
-                    )
-                }
+            textPaintName.textSize = (12f * scale * 80f).coerceIn(22f, 38f)
+            textPaintDesc.textSize = (9f  * scale * 80f).coerceIn(16f, 28f)
 
-                val sunPulse = 1f + sin(t * 1.5f) * 0.04f
-                val sunR     = 52f * scale * sunPulse
-                repeat(4) { i ->
-                    drawCircle(
-                        color  = Color(0xFFFF8F00).copy(alpha = 0.06f * (4 - i)),
-                        radius = sunR * (1f + (i + 1) * 0.45f),
-                        center = Offset(cx, cy)
-                    )
-                }
-                drawCircle(color = Color(0xFFFFCC00), radius = sunR * 1.1f, center = Offset(cx, cy))
-                drawCircle(color = Color(0xFFFFB300), radius = sunR,         center = Offset(cx, cy))
-                drawCircle(color = Color(0xFFFF8F00), radius = sunR * 0.7f,  center = Offset(cx, cy))
-
-                drawContext.canvas.nativeCanvas.drawText("NÚCLEO NEXUS", cx, cy - sunR - 10f, textPaintName)
-
-                val metricPaint = NativePaint().apply {
-                    color       = android.graphics.Color.argb(200, 0, 229, 255)
-                    textAlign   = NativePaint.Align.CENTER
-                    isAntiAlias = true
-                    textSize    = textPaintDesc.textSize * 0.9f
-                }
-                drawContext.canvas.nativeCanvas.drawText(
-                    "CPU ${metrics.cpuPercent}%   FPS ${metrics.fpsCurrent}   GPU ${metrics.gpuPercent}%",
-                    cx, cy + sunR + 26f, metricPaint
+            // Névoas procedurais
+            val nebulaPaint = android.graphics.Paint().apply { isAntiAlias = true }
+            listOf(
+                Triple(cx - w * 0.2f,  cy - h * 0.25f, "#1E0040"),
+                Triple(cx + w * 0.25f, cy + h * 0.15f, "#001540"),
+                Triple(cx - w * 0.1f,  cy + h * 0.2f,  "#000F2A")
+            ).forEach { (nx, ny, hex) ->
+                val nRadius = w * 0.22f
+                val shader  = android.graphics.RadialGradient(
+                    nx, ny, nRadius,
+                    intArrayOf(
+                        android.graphics.Color.parseColor(hex) and 0x00FFFFFF or 0x28000000,
+                        android.graphics.Color.TRANSPARENT
+                    ),
+                    null,
+                    android.graphics.Shader.TileMode.CLAMP
                 )
-
-                planetHitAreas.clear()
-                SolarSystem.PLANETS.forEach { planet ->
-                    val angle = t * planet.orbitSpeed
-                    val rx    = planet.orbitRadius * scale
-                    val ry    = rx * 0.40f
-                    val px    = cx + cos(angle) * rx
-                    val py    = cy + sin(angle) * ry
-                    val pr    = planet.size * scale
-
-                    planetHitAreas.add(Triple(planet.id, px, py))
-
-                    drawCircle(color = planet.color.copy(alpha = 0.18f), radius = pr * 2.8f, center = Offset(px, py))
-                    drawCircle(color = planet.color,                      radius = pr,         center = Offset(px, py))
-                    drawCircle(color = Color.White.copy(alpha = 0.15f),   radius = pr * 0.5f,  center = Offset(px - pr * 0.2f, py - pr * 0.2f))
-                    drawOval(
-                        color   = planet.color.copy(alpha = 0.3f),
-                        topLeft = Offset(px - pr * 1.6f, py - pr * 0.22f),
-                        size    = Size(pr * 3.2f, pr * 0.44f),
-                        style   = Stroke(width = 1.2f)
-                    )
-
-                    textPaintName.color = planet.color.toArgb()
-                    drawContext.canvas.nativeCanvas.drawText(planet.name,        px, py - pr - 14f, textPaintName)
-                    drawContext.canvas.nativeCanvas.drawText(planet.description, px, py + pr + 20f, textPaintDesc)
-                }
+                nebulaPaint.shader = shader
+                drawContext.canvas.nativeCanvas.drawCircle(nx, ny, nRadius, nebulaPaint)
             }
 
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .background(Color(0xFF050510).copy(alpha = 0.88f))
-                    .padding(horizontal = 20.dp),
-                verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                androidx.compose.material.Text(
-                    "⚡ NEXUS LAUNCHER — SISTEMA SOLAR",
-                    color         = Color(0xFF00E5FF),
-                    fontWeight    = FontWeight.Black,
-                    fontSize      = 13.sp,
-                    letterSpacing = 1.5.sp
-                )
-                androidx.compose.material.Text(
-                    "FPS ${metrics.fpsCurrent} · CPU ${metrics.cpuPercent}% · RAM ${String.format("%.1f", metrics.ramGb)}GB",
-                    color      = Color(0xFF00E5FF).copy(alpha = 0.7f),
-                    fontSize   = 10.sp,
-                    fontWeight = FontWeight.Medium
+            // Órbitas
+            SolarSystem.PLANETS.forEach { planet ->
+                val rx = planet.orbitRadius * scale
+                val ry = rx * 0.40f
+                drawOval(
+                    color   = planet.color.copy(alpha = 0.12f),
+                    topLeft = Offset(cx - rx, cy - ry),
+                    size    = Size(rx * 2f, ry * 2f),
+                    style   = Stroke(width = 0.8f)
                 )
             }
 
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(40.dp)
-                    .align(Alignment.BottomCenter)
-                    .background(Color(0xFF050510).copy(alpha = 0.88f))
-                    .padding(horizontal = 16.dp),
-                verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            // Sol (Núcleo Nexus)
+            val sunPulse = 1f + sin(t * 1.5f) * 0.04f
+            val sunR     = 52f * scale * sunPulse
+            repeat(4) { i ->
+                drawCircle(
+                    color  = Color(0xFFFF8F00).copy(alpha = 0.06f * (4 - i)),
+                    radius = sunR * (1f + (i + 1) * 0.45f),
+                    center = Offset(cx, cy)
+                )
+            }
+            drawCircle(color = Color(0xFFFFCC00), radius = sunR * 1.1f, center = Offset(cx, cy))
+            drawCircle(color = Color(0xFFFFB300), radius = sunR,         center = Offset(cx, cy))
+            drawCircle(color = Color(0xFFFF8F00), radius = sunR * 0.7f,  center = Offset(cx, cy))
+            drawContext.canvas.nativeCanvas.drawText("NÚCLEO NEXUS", cx, cy - sunR - 10f, textPaintName)
+
+            val metricPaint = NativePaint().apply {
+                color       = android.graphics.Color.argb(200, 0, 229, 255)
+                textAlign   = NativePaint.Align.CENTER
+                isAntiAlias = true
+                textSize    = textPaintDesc.textSize * 0.9f
+            }
+            drawContext.canvas.nativeCanvas.drawText(
+                "CPU ${metrics.cpuPercent}%   FPS ${metrics.fpsCurrent}   GPU ${metrics.gpuPercent}%",
+                cx, cy + sunR + 26f, metricPaint
+            )
+
+            // Planetas
+            planetHitAreas.clear()
+            SolarSystem.PLANETS.forEach { planet ->
+                val angle = t * planet.orbitSpeed
+                val rx    = planet.orbitRadius * scale
+                val ry    = rx * 0.40f
+                val px    = cx + cos(angle) * rx
+                val py    = cy + sin(angle) * ry
+                val pr    = planet.size * scale
+
+                planetHitAreas.add(Triple(planet.id, px, py))
+
+                drawCircle(color = planet.color.copy(alpha = 0.18f), radius = pr * 2.8f, center = Offset(px, py))
+                drawCircle(color = planet.color,                      radius = pr,         center = Offset(px, py))
+                drawCircle(color = Color.White.copy(alpha = 0.15f),   radius = pr * 0.5f,  center = Offset(px - pr * 0.2f, py - pr * 0.2f))
+                drawOval(
+                    color   = planet.color.copy(alpha = 0.3f),
+                    topLeft = Offset(px - pr * 1.6f, py - pr * 0.22f),
+                    size    = Size(pr * 3.2f, pr * 0.44f),
+                    style   = Stroke(width = 1.2f)
+                )
+
+                textPaintName.color = planet.color.toArgb()
+                drawContext.canvas.nativeCanvas.drawText(planet.name,        px, py - pr - 14f, textPaintName)
+                drawContext.canvas.nativeCanvas.drawText(planet.description, px, py + pr + 20f, textPaintDesc)
+            }
+        }
+
+        // Barra de status — topo
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+                .background(Color(0xFF050510).copy(alpha = 0.88f))
+                .padding(horizontal = 20.dp),
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            androidx.compose.material.Text(
+                "⚡ NEXUS LAUNCHER — SISTEMA SOLAR",
+                color         = Color(0xFF00E5FF),
+                fontWeight    = FontWeight.Black,
+                fontSize      = 13.sp,
+                letterSpacing = 1.5.sp
+            )
+            androidx.compose.material.Text(
+                "FPS ${metrics.fpsCurrent} · CPU ${metrics.cpuPercent}% · RAM ${String.format("%.1f", metrics.ramGb)}GB",
+                color      = Color(0xFF00E5FF).copy(alpha = 0.7f),
+                fontSize   = 10.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+
+        // Barra de status — rodapé
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .align(Alignment.BottomCenter)
+                .background(Color(0xFF050510).copy(alpha = 0.88f))
+                .padding(horizontal = 16.dp),
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            androidx.compose.material.Text(
+                "🚀 Nexus Boost   🎨 Shaders HDR Ativado   🧩 Mods Ativos: 5   📊 Relatório FPS",
+                color    = Color.White.copy(alpha = 0.45f),
+                fontSize = 9.sp
+            )
+            tierResult?.let {
                 androidx.compose.material.Text(
-                    "🚀 Nexus Boost   🎨 Shaders HDR Ativado   🧩 Mods Ativos: 5   📊 Relatório FPS",
-                    color    = Color.White.copy(alpha = 0.45f),
+                    "${it.tier.label} · v1.4.2.0",
+                    color    = Color.White.copy(alpha = 0.3f),
                     fontSize = 9.sp
                 )
-                tierResult?.let {
-                    androidx.compose.material.Text(
-                        "${it.tier.label} · v1.4.1.5",
-                        color    = Color.White.copy(alpha = 0.3f),
-                        fontSize = 9.sp
-                    )
-                }
             }
         }
     }
