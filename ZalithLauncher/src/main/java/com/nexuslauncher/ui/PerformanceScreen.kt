@@ -54,9 +54,15 @@ fun PerformanceScreen(
     // ── Rolling FPS buffer (1 sample/s, max 60 entries) ──────────────────
     val fpsHistory = remember { mutableStateListOf<Int>() }
 
+    // rememberUpdatedState garante que o LaunchedEffect sempre leia
+    // o valor ATUAL de metrics, sem precisar reiniciar o efeito.
+    // Sem isso, o coroutine capturaria o metrics da composição inicial
+    // e nunca atualizaria → gráfico sempre mostraria FPS = 0.
+    val currentMetrics by rememberUpdatedState(metrics)
+
     LaunchedEffect(Unit) {
         while (true) {
-            fpsHistory.add(metrics.fpsCurrent)
+            fpsHistory.add(currentMetrics.fpsCurrent)
             if (fpsHistory.size > FPS_HISTORY_SIZE) {
                 fpsHistory.removeAt(0)
             }
@@ -64,9 +70,11 @@ fun PerformanceScreen(
         }
     }
 
-    // Live snapshot for derived stats (recomputes whenever fpsHistory changes)
-    val fpsMin = if (fpsHistory.isEmpty()) 0 else fpsHistory.min()
-    val fpsMax = if (fpsHistory.isEmpty()) 0 else fpsHistory.max()
+    // Live snapshot para estatísticas derivadas.
+    // Usa minOrNull()/maxOrNull() em vez de min()/max() para compatibilidade
+    // com todas as versões de Kotlin (min()/max() são deprecated em Kotlin 1.7+).
+    val fpsMin = fpsHistory.minOrNull() ?: 0
+    val fpsMax = fpsHistory.maxOrNull() ?: 0
     val fpsAvg = if (fpsHistory.isEmpty()) 0 else fpsHistory.average().toInt()
 
     Column(
@@ -220,7 +228,7 @@ private fun FpsLineChart(
 ) {
     // Escala Y: 0 ... yMax arredondado para múltiplo de 30
     val yMax = if (fpsHistory.isEmpty()) 120
-               else maxOf(120, ((fpsHistory.max() / 30 + 1) * 30))
+               else maxOf(120, (((fpsHistory.maxOrNull() ?: 0) / 30 + 1) * 30))
 
     Canvas(modifier = modifier) {
         if (fpsHistory.size < 2) return@Canvas
