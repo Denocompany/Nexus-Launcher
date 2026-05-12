@@ -5,6 +5,7 @@ import com.github.megatronking.stringfog.plugin.StringFogExtension
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android") version "2.0.21"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.0.21"
     id("stringfog")
 }
 apply(plugin = "stringfog")
@@ -182,6 +183,7 @@ android {
         prefab = true
         buildConfig = true
         viewBinding = true
+        compose = true
     }
 
     buildToolsVersion = "34.0.0"
@@ -277,4 +279,14 @@ dependencies {
     implementation("com.moandjiezana.toml:toml4j:0.7.2") {
         exclude(group = "com.google.code.gson", module = "gson")
     }
+    // ── Nexus Launcher — Jetpack Compose ──────────────────────────────
+    implementation(platform("androidx.compose:compose-bom:2024.04.01"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.material:material")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.activity:activity-compose:1.8.2")
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    // ──────────────────────────────────────────────────────────────────
+
 }

@@ -93,6 +93,17 @@
             android:launchMode="singleTop"
             android:process=":game"
             android:screenOrientation="sensorLandscape" />
+        <!--
+            NexusMainActivity — Nova UI Jetpack Compose (Fase 1).
+            Para ativá-la como launcher, troque o intent-filter do SplashActivity
+            por este bloco quando a Fase 2 estiver concluída.
+        -->
+        <activity
+            android:name="com.nexuslauncher.NexusMainActivity"
+            android:exported="true"
+            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar" />
 
         <provider
             android:name="net.kdt.pojavlaunch.scoped.FolderProvider"
