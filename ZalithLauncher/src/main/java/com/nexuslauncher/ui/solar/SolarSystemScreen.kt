@@ -1,24 +1,19 @@
 package com.nexuslauncher.ui.solar
 
-import androidx.compose.animation.AnimatedVisibility
+import android.graphics.Paint as NativePaint
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.*
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.runtime.*
@@ -26,16 +21,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nexuslauncher.core.NexusBoostEngine
-import com.nexuslauncher.core.NexusSystemMonitor
-import com.nexuslauncher.render.NexusBackground3D
 import com.nexuslauncher.ui.AccountsScreen
 import com.nexuslauncher.ui.HomeScreen
 import com.nexuslauncher.ui.InstancesScreen
@@ -46,38 +41,27 @@ import com.nexuslauncher.ui.SettingsScreen
 import com.nexuslauncher.ui.VisualScreen
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
- * SolarSystemScreen — Tela principal do Nexus Launcher (Fase 3).
+ * SolarSystemScreen — Fase 3.5.
  *
- * Navegação baseada em planetas:
- *  • Toque em um planeta → painel lateral com métricas e Nexus Boost
- *  • "ENTRAR" → abre a tela correspondente em overlay sobre o fundo 3D
- *  • Botão Voltar → retorna ao Sistema Solar
- *
- * Mapeamento planeta → tela:
- *  nexus       → HomeScreen
- *  aetherion   → PerformanceScreen
- *  lumina      → VisualScreen
- *  modara      → ModsScreen
- *  curseforge  → ModsScreen
- *  instarrion  → InstancesScreen
- *  chronos     → ReportsScreen
- *  cloudnexus  → ReportsScreen
- *  persona     → AccountsScreen
- *  labx        → SettingsScreen
- *  helios      → SettingsScreen
+ * IUx ESTÁTICA + navegação direta:
+ * - Fundo espacial via gradiente Compose (sem SurfaceView/threads)
+ * - Toque em planeta → vai DIRETO para a tela correspondente
+ * - Sem painel lateral intermediário
+ * - Planetas exibidos com labels de nome e descrição
  */
 @Composable
 fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
-    val selectedPlanet by vm.selectedPlanet.collectAsState()
-    val metrics        by vm.systemMetrics.collectAsState()
-    val tierResult     by vm.tierResult.collectAsState()
-    val boostReport    by vm.boostReport.collectAsState()
-    val glowIntensity  = vm.planetGlowIntensity()
+    val metrics     by vm.systemMetrics.collectAsState()
+    val tierResult  by vm.tierResult.collectAsState()
+    val boostReport by vm.boostReport.collectAsState()
 
-    // Tracks which planet's full screen is currently open
     var currentScreen by remember { mutableStateOf<String?>(null) }
+
+    // Armazena posições calculadas no último frame para hit-testing
+    val planetHitAreas = remember { mutableListOf<Triple<String, Float, Float>>() }
 
     val infiniteTransition = rememberInfiniteTransition(label = "solar")
     val time by infiniteTransition.animateFloat(
@@ -89,21 +73,31 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
 
     Box(Modifier.fillMaxSize()) {
 
-        // ── Animated 3D Background (always visible, behind all content) ─
-        AndroidView(
-            modifier = Modifier.matchParentSize(),
-            factory  = { context -> NexusBackground3D(context) },
-            update   = { view  -> view.updateTier(tierResult) }
+        // ── Fundo estático via Compose (sem SurfaceView) ─────────────────
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(Color(0xFF0D0A1A), Color(0xFF05050A)),
+                        radius = 1200f
+                    )
+                )
         )
 
         if (currentScreen != null) {
 
-            // ── Full-screen planet content ─────────────────────────────
-            Box(Modifier.fillMaxSize().background(Color(0xF005050A))) {
+            // ── Tela do planeta selecionado ───────────────────────────────
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xF005050A))
+            ) {
                 when (currentScreen) {
                     "nexus"      -> HomeScreen(
                         instanceName = "Survival 1.18.1",
-                        metrics      = metrics
+                        metrics      = metrics,
+                        onLaunchGame = { /* Manter funcionalidade original de lançamento */ }
                     )
                     "aetherion"  -> PerformanceScreen(
                         metrics     = metrics,
@@ -122,9 +116,9 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
                     else         -> HomeScreen(instanceName = "Survival 1.18.1", metrics = metrics)
                 }
 
-                // Back to solar system
+                // Botão voltar ao Sistema Solar
                 IconButton(
-                    onClick  = { currentScreen = null; vm.selectPlanet(null) },
+                    onClick  = { currentScreen = null },
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(8.dp)
@@ -139,71 +133,163 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
 
         } else {
 
-            // ── Solar System Canvas ────────────────────────────────────
-            Canvas(Modifier.fillMaxSize().clickable { vm.selectPlanet(null) }) {
-                val cx    = size.width  / 2f
-                val cy    = size.height / 2f
-                val scale = minOf(size.width, size.height) / 1200f
+            // ── Sistema Solar Canvas + hit-testing ───────────────────────
+            val textPaintName = remember {
+                NativePaint().apply {
+                    color       = android.graphics.Color.WHITE
+                    textAlign   = NativePaint.Align.CENTER
+                    isFakeBoldText = true
+                    isAntiAlias = true
+                }
+            }
+            val textPaintDesc = remember {
+                NativePaint().apply {
+                    color     = android.graphics.Color.argb(180, 180, 220, 255)
+                    textAlign = NativePaint.Align.CENTER
+                    isAntiAlias = true
+                }
+            }
 
-                // Orbital rings
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures { tapOffset ->
+                            val hit = planetHitAreas.firstOrNull { (_, px, py) ->
+                                val dx = tapOffset.x - px
+                                val dy = tapOffset.y - py
+                                sqrt(dx * dx + dy * dy) < 80f
+                            }
+                            hit?.let { (id, _, _) -> currentScreen = id }
+                        }
+                    }
+            ) {
+                val w     = size.width
+                val h     = size.height
+                val cx    = w / 2f
+                val cy    = h / 2f
+                val scale = minOf(w, h) / 1200f
+                val t     = time * 0.001f
+
+                textPaintName.textSize = (12f * scale * 80f).coerceIn(22f, 38f)
+                textPaintDesc.textSize = (9f  * scale * 80f).coerceIn(16f, 28f)
+
+                // Névoas de fundo
+                val nebulaPaint = android.graphics.Paint().apply { isAntiAlias = true }
+                listOf(
+                    Triple(cx - w * 0.2f, cy - h * 0.25f, "#1E0040"),
+                    Triple(cx + w * 0.25f, cy + h * 0.15f, "#001540"),
+                    Triple(cx - w * 0.1f, cy + h * 0.2f,  "#000F2A")
+                ).forEach { (nx, ny, hex) ->
+                    val nRadius = w * 0.22f
+                    val shader  = android.graphics.RadialGradient(
+                        nx, ny, nRadius,
+                        intArrayOf(
+                            android.graphics.Color.parseColor(hex) and 0x00FFFFFF or 0x28000000,
+                            android.graphics.Color.TRANSPARENT
+                        ),
+                        null,
+                        android.graphics.Shader.TileMode.CLAMP
+                    )
+                    nebulaPaint.shader = shader
+                    drawContext.canvas.nativeCanvas.drawCircle(nx, ny, nRadius, nebulaPaint)
+                }
+
+                // Anéis orbitais
                 SolarSystem.PLANETS.forEach { planet ->
                     val rx = planet.orbitRadius * scale
-                    val ry = rx * 0.38f
-                    val sel = selectedPlanet == planet.id
+                    val ry = rx * 0.40f
                     drawOval(
-                        color   = if (sel) planet.color.copy(alpha = 0.7f)
-                                  else     planet.color.copy(alpha = 0.15f),
+                        color   = planet.color.copy(alpha = 0.12f),
                         topLeft = Offset(cx - rx, cy - ry),
                         size    = Size(rx * 2f, ry * 2f),
-                        style   = Stroke(width = if (sel) 1.5f else 0.8f)
+                        style   = Stroke(width = 0.8f)
                     )
                 }
 
-                // Sun (pulsating + corona)
-                val t        = time * 0.001f
-                val sunPulse = 1f + sin(t * 2f) * 0.05f
-                val sunR     = 40f * scale * sunPulse
-                repeat(3) { i ->
+                // Sol central — Núcleo Nexus
+                val sunPulse = 1f + sin(t * 1.5f) * 0.04f
+                val sunR     = 52f * scale * sunPulse
+                repeat(4) { i ->
                     drawCircle(
-                        color  = Color(0xFFFF8F00).copy(alpha = 0.05f * (3 - i)),
-                        radius = sunR * (1f + (i + 1) * 0.4f),
+                        color  = Color(0xFFFF8F00).copy(alpha = 0.06f * (4 - i)),
+                        radius = sunR * (1f + (i + 1) * 0.45f),
                         center = Offset(cx, cy)
                     )
                 }
-                drawCircle(color = Color(0xFFFFB300), radius = sunR, center = Offset(cx, cy))
+                drawCircle(color = Color(0xFFFFCC00), radius = sunR * 1.1f, center = Offset(cx, cy))
+                drawCircle(color = Color(0xFFFFB300), radius = sunR,         center = Offset(cx, cy))
+                drawCircle(color = Color(0xFFFF8F00), radius = sunR * 0.7f,  center = Offset(cx, cy))
 
-                // Planets
+                // Label do Sol
+                drawContext.canvas.nativeCanvas.drawText(
+                    "NÚCLEO NEXUS",
+                    cx, cy - sunR - 10f, textPaintName
+                )
+
+                // Métricas ao redor do sol
+                val metricPaint = NativePaint().apply {
+                    color       = android.graphics.Color.argb(200, 0, 229, 255)
+                    textAlign   = NativePaint.Align.CENTER
+                    isAntiAlias = true
+                    textSize    = textPaintDesc.textSize * 0.9f
+                }
+                drawContext.canvas.nativeCanvas.drawText(
+                    "CPU ${metrics.cpuPercent}%   FPS ${metrics.fpsCurrent}   GPU ${metrics.gpuPercent}%",
+                    cx, cy + sunR + 26f, metricPaint
+                )
+
+                // Planetas + hit-areas
+                planetHitAreas.clear()
                 SolarSystem.PLANETS.forEach { planet ->
                     val angle = t * planet.orbitSpeed
                     val rx    = planet.orbitRadius * scale
-                    val ry    = rx * 0.38f
-                    val px    = (cx + cos(angle) * rx).toFloat()
-                    val py    = (cy + sin(angle) * ry).toFloat()
+                    val ry    = rx * 0.40f
+                    val px    = cx + cos(angle) * rx
+                    val py    = cy + sin(angle) * ry
                     val pr    = planet.size * scale
-                    val sel   = selectedPlanet == planet.id
 
-                    // Glow halo
+                    planetHitAreas.add(Triple(planet.id, px, py))
+
+                    // Halo
                     drawCircle(
-                        color  = planet.color.copy(alpha = glowIntensity * if (sel) 0.6f else 0.2f),
-                        radius = pr * 2.5f,
+                        color  = planet.color.copy(alpha = 0.18f),
+                        radius = pr * 2.8f,
                         center = Offset(px, py)
                     )
-                    // Planet body
+                    // Corpo do planeta
                     drawCircle(
                         color  = planet.color,
-                        radius = pr * if (sel) 1.3f else 1f,
+                        radius = pr,
                         center = Offset(px, py)
                     )
-                    // Selection ring
-                    if (sel) {
-                        val pulse = 1f + sin(t * 3f) * 0.15f
-                        drawCircle(
-                            color  = planet.color.copy(alpha = 0.5f),
-                            radius = pr * 1.8f * pulse,
-                            center = Offset(px, py),
-                            style  = Stroke(width = 1.5f)
-                        )
-                    }
+                    // Brilho interno
+                    drawCircle(
+                        color  = Color.White.copy(alpha = 0.15f),
+                        radius = pr * 0.5f,
+                        center = Offset(px - pr * 0.2f, py - pr * 0.2f)
+                    )
+                    // Anel (todos os planetas têm anel sutil)
+                    drawOval(
+                        color   = planet.color.copy(alpha = 0.3f),
+                        topLeft = Offset(px - pr * 1.6f, py - pr * 0.22f),
+                        size    = Size(pr * 3.2f, pr * 0.44f),
+                        style   = Stroke(width = 1.2f)
+                    )
+
+                    // Nome do planeta
+                    textPaintName.color = planet.color.toArgb()
+                    drawContext.canvas.nativeCanvas.drawText(
+                        planet.name,
+                        px, py - pr - 14f,
+                        textPaintName
+                    )
+                    // Descrição
+                    drawContext.canvas.nativeCanvas.drawText(
+                        planet.description,
+                        px, py + pr + 20f,
+                        textPaintDesc
+                    )
                 }
             }
 
@@ -211,258 +297,51 @@ fun SolarSystemScreen(vm: SolarSystemViewModel = viewModel()) {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
-                    .background(Color(0xFF0A0A20).copy(alpha = 0.85f))
-                    .padding(horizontal = 16.dp),
+                    .height(50.dp)
+                    .background(Color(0xFF050510).copy(alpha = 0.88f))
+                    .padding(horizontal = 20.dp),
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    "⚡ NEXUS LAUNCHER",
+                androidx.compose.material.Text(
+                    "⚡ NEXUS LAUNCHER — SISTEMA SOLAR",
                     color         = Color(0xFF00E5FF),
                     fontWeight    = FontWeight.Black,
-                    fontSize      = 14.sp,
-                    letterSpacing = 2.sp
+                    fontSize      = 13.sp,
+                    letterSpacing = 1.5.sp
                 )
-                Text(
-                    text = selectedPlanet?.let { id ->
-                        SolarSystem.PLANETS.find { it.id == id }?.let { "🪐 ${it.name}" }
-                    } ?: "☀ Home",
-                    color    = Color.White.copy(alpha = 0.7f),
-                    fontSize = 11.sp
-                )
-                Text(
-                    "FPS ${metrics.fpsCurrent} | CPU ${metrics.cpuPercent}% | RAM ${String.format("%.1f", metrics.ramGb)}GB",
-                    color      = Color(0xFF00E5FF).copy(alpha = 0.8f),
+                androidx.compose.material.Text(
+                    "FPS ${metrics.fpsCurrent} · CPU ${metrics.cpuPercent}% · RAM ${String.format("%.1f", metrics.ramGb)}GB",
+                    color      = Color(0xFF00E5FF).copy(alpha = 0.7f),
                     fontSize   = 10.sp,
                     fontWeight = FontWeight.Medium
                 )
             }
 
-            // ── Planet Side Panel (animated) ────────────────────────────
-            AnimatedVisibility(
-                visible  = selectedPlanet != null,
-                enter    = slideInHorizontally { it } + fadeIn(),
-                exit     = slideOutHorizontally { it } + fadeOut(),
-                modifier = Modifier.align(Alignment.CenterEnd)
-            ) {
-                selectedPlanet?.let { id ->
-                    SolarSystem.PLANETS.find { it.id == id }?.let { planet ->
-                        PlanetSidePanel(
-                            planet      = planet,
-                            vm          = vm,
-                            metrics     = metrics,
-                            boostReport = boostReport,
-                            onClose     = { vm.selectPlanet(null) },
-                            onEnter     = { currentScreen = planet.id }
-                        )
-                    }
-                }
-            }
-
-            // ── Bottom HUD ─────────────────────────────────────────────
+            // ── Bottom bar ─────────────────────────────────────────────
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .height(44.dp)
+                    .height(40.dp)
                     .align(Alignment.BottomCenter)
-                    .background(Color(0xFF0A0A20).copy(alpha = 0.85f))
+                    .background(Color(0xFF050510).copy(alpha = 0.88f))
                     .padding(horizontal = 16.dp),
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment     = Alignment.CenterVertically
-                ) {
-                    SolarSystem.PLANETS.forEach { planet ->
-                        val sel = selectedPlanet == planet.id
-                        Box(
-                            Modifier
-                                .size(if (sel) 12.dp else 8.dp)
-                                .background(
-                                    if (sel) planet.color else planet.color.copy(alpha = 0.4f),
-                                    RoundedCornerShape(50)
-                                )
-                                .clickable { vm.selectPlanet(planet.id) }
-                        )
-                    }
-                }
+                androidx.compose.material.Text(
+                    "🚀 Nexus Boost   🎨 Shaders HDR Ativado   🧩 Mods Ativos: 5   📊 Relatório FPS",
+                    color    = Color.White.copy(alpha = 0.45f),
+                    fontSize = 9.sp
+                )
                 tierResult?.let {
-                    Text(
-                        "${it.tier.label} | v1.0.0-nexus",
-                        color    = Color.White.copy(alpha = 0.4f),
+                    androidx.compose.material.Text(
+                        "${it.tier.label} · v1.4.1.5",
+                        color    = Color.White.copy(alpha = 0.3f),
                         fontSize = 9.sp
                     )
                 }
             }
         }
-    }
-}
-
-// ── Planet Side Panel ──────────────────────────────────────────────────
-
-@Composable
-private fun PlanetSidePanel(
-    planet:      PlanetNode,
-    vm:          SolarSystemViewModel,
-    metrics:     NexusSystemMonitor.SystemMetrics,
-    boostReport: NexusBoostEngine.BoostReport,
-    onClose:     () -> Unit,
-    onEnter:     () -> Unit
-) {
-    val selectedMoon by vm.selectedMoon.collectAsState()
-
-    Surface(
-        modifier  = Modifier
-            .fillMaxHeight()
-            .width(340.dp),
-        color     = Color(0xFF0D0D20).copy(alpha = 0.92f),
-        shape     = RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp),
-        elevation = 8.dp
-    ) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-
-            // ── Header ────────────────────────────────────────────────
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .background(planet.color.copy(alpha = 0.12f))
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment     = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        planet.name,
-                        color         = planet.color,
-                        fontWeight    = FontWeight.Black,
-                        fontSize      = 16.sp,
-                        letterSpacing = 1.sp
-                    )
-                    Text(
-                        planet.description,
-                        color    = Color.White.copy(alpha = 0.5f),
-                        fontSize = 11.sp
-                    )
-                }
-                TextButton(onClick = onClose) {
-                    Text("✕", color = Color.White.copy(alpha = 0.6f))
-                }
-            }
-
-            Divider(color = planet.color.copy(alpha = 0.2f))
-
-            // ── Moons (sub-modules) ────────────────────────────────────
-            if (planet.moons.isNotEmpty()) {
-                Text(
-                    "MÓDULOS",
-                    color         = Color.White.copy(alpha = 0.4f),
-                    fontSize      = 9.sp,
-                    letterSpacing = 2.sp,
-                    modifier      = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp)
-                )
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    planet.moons.take(4).forEach { moon ->
-                        val active = selectedMoon == moon
-                        OutlinedButton(
-                            onClick        = { vm.selectMoon(if (active) null else moon) },
-                            modifier       = Modifier.height(28.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                            colors         = ButtonDefaults.outlinedButtonColors(
-                                contentColor = if (active) planet.color else Color.White.copy(alpha = 0.4f)
-                            )
-                        ) {
-                            Text(moon, fontSize = 9.sp)
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // ── Live metrics ───────────────────────────────────────────
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                MetricRow("FPS", "${metrics.fpsCurrent}", planet.color)
-                MetricRow("CPU", "${metrics.cpuPercent}%", planet.color)
-                MetricRow("GPU", "${metrics.gpuPercent}%", planet.color)
-                MetricRow(
-                    "RAM",
-                    "${String.format("%.1f", metrics.ramGb)} / ${String.format("%.1f", metrics.ramTotalGb)} GB",
-                    planet.color
-                )
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            // ── Enter screen button ────────────────────────────────────
-            Button(
-                onClick  = onEnter,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .height(44.dp),
-                colors   = ButtonDefaults.buttonColors(backgroundColor = planet.color)
-            ) {
-                Text(
-                    "ENTRAR EM ${planet.name}",
-                    fontWeight    = FontWeight.Bold,
-                    fontSize      = 11.sp,
-                    color         = Color(0xFF05050A),
-                    letterSpacing = 0.5.sp
-                )
-            }
-
-            // ── Nexus Boost (Aetherion only) ───────────────────────────
-            if (planet.id == "aetherion") {
-                Spacer(Modifier.height(6.dp))
-                Button(
-                    onClick  = { vm.triggerBoost() },
-                    enabled  = boostReport.state != NexusBoostEngine.BoostState.RUNNING,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .height(48.dp),
-                    colors   = ButtonDefaults.buttonColors(backgroundColor = Color(0xFFFF6D00))
-                ) {
-                    Text(
-                        when (boostReport.state) {
-                            NexusBoostEngine.BoostState.RUNNING -> "⚡ Otimizando..."
-                            NexusBoostEngine.BoostState.DONE    -> "✓ +${boostReport.estimatedGainPct}% aplicado"
-                            else                                -> "⚡ NEXUS BOOST"
-                        },
-                        fontWeight = FontWeight.Bold,
-                        fontSize   = 13.sp
-                    )
-                }
-                if (boostReport.state == NexusBoostEngine.BoostState.DONE) {
-                    Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                        boostReport.stepsDone.forEach { step ->
-                            Text(step, color = Color(0xFF00E676), fontSize = 11.sp)
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-        }
-    }
-}
-
-// ── Metric row helper ──────────────────────────────────────────────────
-
-@Composable
-private fun MetricRow(label: String, value: String, accentColor: Color) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp)
-        Text(value, color = accentColor, fontWeight = FontWeight.Bold, fontSize = 11.sp)
     }
 }

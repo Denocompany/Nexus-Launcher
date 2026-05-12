@@ -8,22 +8,21 @@ import android.graphics.RadialGradient
 import android.graphics.Shader
 import android.os.Build
 import android.util.AttributeSet
-import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import com.nexuslauncher.core.NexusTier
 import com.nexuslauncher.core.TierResult
-import kotlin.math.cos
-import kotlin.math.sin
+import kotlin.random.Random
 
 /**
- * NexusBackground3D — Fundo 3D animado com partículas, parallax e nebulosas.
+ * NexusBackground3D — Fundo ESTÁTICO espacial do Nexus Launcher.
  *
- * Renderiza usando Canvas 2D com fallback automático para OpenGL ES.
- * Reage ao Tier: T1/T2 = denso, T3 = médio, T4/T5 = leve.
- * Reage ao toque: arrastar move a câmera, toque pulsa partículas.
+ * FASE 3.5: Sem partículas, sem threads de renderização, sem animações.
+ * Corrige ConcurrentModificationException da versão animada anterior.
  *
- * Uso em Compose: use AndroidView { NexusBackground3D(it, tierResult) }
+ * Desenha um fundo espacial estático com:
+ * - Gradiente radial profundo
+ * - Estrelas estáticas pré-geradas
+ * - Névoas procedurais estáticas
  */
 class NexusBackground3D @JvmOverloads constructor(
     context: Context,
@@ -32,184 +31,92 @@ class NexusBackground3D @JvmOverloads constructor(
     private val tierResult: TierResult? = null
 ) : SurfaceView(context, attrs, defStyle), SurfaceHolder.Callback {
 
-    private val particleCount get() = when (tierResult?.tier) {
-        NexusTier.T1_ULTRA    -> 2000
-        NexusTier.T2_ALTO     -> 1200
-        NexusTier.T3_AVANCADO -> 600
-        NexusTier.T4_MEDIO    -> 250
-        else                  -> 80
-    }
-
-    private lateinit var particleSystem: NexusParticleSystem
-    private var renderThread: Thread? = null
-    private var running = false
-
-    // Camera/parallax state
-    private var camX = 0f
-    private var camY = 0f
-    private var lastTouchX = 0f
-    private var lastTouchY = 0f
-
-    // Paints
-    private val starPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val cubePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE; strokeWidth = 1.5f
-    }
-    private val nebulaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val bgPaint     = Paint()
+    private val starPaint   = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val nebulaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+
+    // Estrelas estáticas pré-geradas — nunca modificadas após criação
+    private val stars: List<Triple<Float, Float, Float>> = (0 until 220).map {
+        Triple(Random.nextFloat(), Random.nextFloat(), Random.nextFloat() * 2.2f + 0.4f)
+    }
+
+    // Dim/bright stars for variety
+    private val starAlphas: List<Int> = stars.map { (rx, _, _) ->
+        (80 + (rx * 175).toInt()).coerceIn(70, 255)
+    }
 
     init {
         holder.addCallback(this)
-        particleSystem = NexusParticleSystem(particleCount)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             setLayerType(LAYER_TYPE_HARDWARE, null)
         }
     }
 
-    override fun surfaceCreated(h: SurfaceHolder) { startRendering() }
-    override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, hh: Int) {}
-    override fun surfaceDestroyed(h: SurfaceHolder) { stopRendering() }
-
-    private fun startRendering() {
-        running = true
-        renderThread = Thread {
-            var lastTime = System.nanoTime()
-            while (running) {
-                val now = System.nanoTime()
-                val dt  = (now - lastTime) / 1_000_000_000f
-                lastTime = now
-
-                particleSystem.update(dt)
-
-                val canvas = holder.lockCanvas() ?: continue
-                try { drawScene(canvas) }
-                finally { holder.unlockCanvasAndPost(canvas) }
-
-                Thread.sleep(16) // ~60fps
-            }
-        }.apply { isDaemon = true; start() }
+    override fun surfaceCreated(h: SurfaceHolder) {
+        drawStaticBackground()
     }
 
-    private fun stopRendering() {
-        running = false
-        renderThread?.interrupt()
-        renderThread = null
+    override fun surfaceChanged(h: SurfaceHolder, format: Int, w: Int, hh: Int) {
+        drawStaticBackground()
+    }
+
+    override fun surfaceDestroyed(h: SurfaceHolder) {
+        // Nenhum thread para parar — totalmente seguro
+    }
+
+    private fun drawStaticBackground() {
+        val canvas = holder.lockCanvas() ?: return
+        try {
+            drawScene(canvas)
+        } finally {
+            holder.unlockCanvasAndPost(canvas)
+        }
     }
 
     private fun drawScene(canvas: Canvas) {
-        val w = canvas.width.toFloat()
-        val h = canvas.height.toFloat()
-        val cx = w / 2f + camX * 0.3f
-        val cy = h / 2f + camY * 0.3f
+        val w  = canvas.width.toFloat()
+        val h  = canvas.height.toFloat()
+        val cx = w / 2f
+        val cy = h / 2f
 
-        // Background
-        val bg = RadialGradient(cx, cy, w * 0.75f,
+        // Fundo: gradiente radial do espaço profundo
+        bgPaint.shader = RadialGradient(
+            cx, cy, w * 0.9f,
             intArrayOf(Color.parseColor("#0D0A1A"), Color.parseColor("#05050A")),
-            null, Shader.TileMode.CLAMP)
-        bgPaint.shader = bg
+            null, Shader.TileMode.CLAMP
+        )
         canvas.drawRect(0f, 0f, w, h, bgPaint)
 
-        // Nebulae
-        drawNebulae(canvas, w, h, cx, cy)
+        // Névoas estáticas
+        drawNebula(canvas, cx - w * 0.25f, cy - h * 0.3f, w * 0.35f, "#1E0040", 0x1E)
+        drawNebula(canvas, cx + w * 0.30f, cy + h * 0.20f, w * 0.28f, "#001540", 0x18)
+        drawNebula(canvas, cx - w * 0.05f, cy + h * 0.30f, w * 0.22f, "#001020", 0x14)
+        drawNebula(canvas, cx + w * 0.10f, cy - h * 0.20f, w * 0.18f, "#0A0030", 0x10)
 
-        // Particles
-        val scaleX = w / 5f
-        val scaleY = h / 5f
-
-        particleSystem.getParticles().forEach { p ->
-            val sx = cx + p.x * scaleX + camX * 0.1f
-            val sy = cy + p.y * scaleY + camY * 0.1f
-
-            when (p.type) {
-                NexusParticleSystem.ParticleType.STAR -> {
-                    starPaint.color = Color.argb(
-                        (p.alpha * 255).toInt().coerceIn(0, 255),
-                        255, 255, 255
-                    )
-                    canvas.drawCircle(sx, sy, p.size * 0.5f, starPaint)
-                }
-                NexusParticleSystem.ParticleType.DUST -> {
-                    starPaint.color = Color.argb(
-                        (p.alpha * 255).toInt().coerceIn(0, 255),
-                        0, 229, 255
-                    )
-                    canvas.drawCircle(sx, sy, p.size * 0.4f, starPaint)
-                }
-                NexusParticleSystem.ParticleType.CUBE -> {
-                    if (tierResult?.tier?.level ?: 0 >= 3) {
-                        cubePaint.color = Color.argb(
-                            (p.alpha * 255 * 0.6f).toInt().coerceIn(0, 255),
-                            0, 120, 255
-                        )
-                        drawRotatedSquare(canvas, sx, sy, p.size, p.rotAngle, cubePaint)
-                    }
-                }
-                NexusParticleSystem.ParticleType.NEBULA_POINT -> {
-                    nebulaPaint.color = Color.argb(
-                        (p.alpha * 255).toInt().coerceIn(0, 255),
-                        120, 30, 255
-                    )
-                    canvas.drawCircle(sx, sy, p.size * 1.5f, nebulaPaint)
-                }
-                else -> {}
-            }
+        // Estrelas estáticas pré-geradas
+        stars.forEachIndexed { i, (rx, ry, size) ->
+            starPaint.color = Color.argb(starAlphas[i], 255, 255, 255)
+            canvas.drawCircle(rx * w, ry * h, size * 0.5f, starPaint)
         }
     }
 
-    private fun drawNebulae(canvas: Canvas, w: Float, h: Float, cx: Float, cy: Float) {
-        val t = System.currentTimeMillis() / 8000.0
-        val offsets = listOf(
-            Triple(cx + sin(t * 0.3).toFloat() * w * 0.15f, cy - h * 0.2f, "#1E0040"),
-            Triple(cx - w * 0.2f + cos(t * 0.2).toFloat() * 30f, cy + h * 0.15f, "#001540"),
+    private fun drawNebula(canvas: Canvas, nx: Float, ny: Float, radius: Float, hex: String, alpha: Int) {
+        val baseColor = Color.parseColor(hex)
+        val withAlpha = (baseColor and 0x00FFFFFF) or (alpha shl 24)
+        nebulaPaint.shader = RadialGradient(
+            nx, ny, radius,
+            intArrayOf(withAlpha, Color.TRANSPARENT),
+            null, Shader.TileMode.CLAMP
         )
-        offsets.forEach { (nx, ny, hex) ->
-            val rad = w * 0.25f
-            val grad = RadialGradient(nx, ny, rad,
-                intArrayOf(Color.parseColor(hex) and 0x22FFFFFF or 0x22000000, Color.TRANSPARENT),
-                null, Shader.TileMode.CLAMP)
-            nebulaPaint.shader = grad
-            nebulaPaint.color  = Color.parseColor(hex)
-            canvas.drawCircle(nx, ny, rad, nebulaPaint)
-            nebulaPaint.shader = null
-        }
+        canvas.drawCircle(nx, ny, radius, nebulaPaint)
+        nebulaPaint.shader = null
     }
 
-    private fun drawRotatedSquare(canvas: Canvas, cx: Float, cy: Float, size: Float, angle: Float, paint: Paint) {
-        canvas.save()
-        canvas.translate(cx, cy)
-        canvas.rotate(Math.toDegrees(angle.toDouble()).toFloat())
-        canvas.drawRect(-size/2f, -size/2f, size/2f, size/2f, paint)
-        canvas.restore()
-    }
-
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                lastTouchX = event.x; lastTouchY = event.y
-                val px = (event.x - width / 2f) / (width / 5f)
-                val py = (event.y - height / 2f) / (height / 5f)
-                particleSystem.onTouch(px, py)
-            }
-            MotionEvent.ACTION_MOVE -> {
-                camX += (event.x - lastTouchX) * 0.5f
-                camY += (event.y - lastTouchY) * 0.5f
-                camX = camX.coerceIn(-80f, 80f)
-                camY = camY.coerceIn(-80f, 80f)
-                lastTouchX = event.x; lastTouchY = event.y
-            }
-        }
-        return true
-    }
-
-    /** Atualiza a densidade de partículas conforme o Tier do dispositivo (Fase 3). */
-    fun updateTier(result: com.nexuslauncher.core.TierResult?) {
-        val count = when (result?.tier) {
-            com.nexuslauncher.core.NexusTier.T1_ULTRA    -> 2000
-            com.nexuslauncher.core.NexusTier.T2_ALTO     -> 1200
-            com.nexuslauncher.core.NexusTier.T3_AVANCADO -> 600
-            com.nexuslauncher.core.NexusTier.T4_MEDIO    -> 250
-            else                                          -> 80
-        }
-        particleSystem.setDensity(count)
+    /**
+     * Mantida para compatibilidade com SolarSystemScreen.
+     * Na versão estática, não faz nada — sem threads ou partículas.
+     */
+    fun updateTier(result: TierResult?) {
+        // Fundo estático — sem ajuste de densidade por tier
     }
 }
