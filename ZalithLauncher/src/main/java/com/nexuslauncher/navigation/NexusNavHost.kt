@@ -17,7 +17,6 @@ import com.nexuslauncher.ui.SettingsScreen
 import com.nexuslauncher.ui.VisualScreen
 import com.nexuslauncher.ui.solar.SolarSystemScreen
 import com.nexuslauncher.viewmodel.HomeViewModel
-import com.nexuslauncher.viewmodel.InstancesViewModel
 
 @Composable
 fun NexusNavHost(
@@ -111,7 +110,6 @@ fun NexusNavHost(
         }
 
         composable(NexusRoute.Instances.route) {
-            val instancesVm: InstancesViewModel = viewModel(factory = InstancesViewModel.factory(nexusDataStore))
             InstancesScreen(
                 onManageMods        = { navController.navigate(NexusRoute.Mods.route) },
                 onChangeDirectories = { navController.navigate(NexusRoute.Settings.route) },
