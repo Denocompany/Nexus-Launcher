@@ -200,4 +200,16 @@ class NexusBackground3D @JvmOverloads constructor(
         }
         return true
     }
+
+    /** Atualiza a densidade de partículas conforme o Tier do dispositivo (Fase 3). */
+    fun updateTier(result: com.nexuslauncher.core.TierResult?) {
+        val count = when (result?.tier) {
+            com.nexuslauncher.core.NexusTier.T1_ULTRA    -> 2000
+            com.nexuslauncher.core.NexusTier.T2_ALTO     -> 1200
+            com.nexuslauncher.core.NexusTier.T3_AVANCADO -> 600
+            com.nexuslauncher.core.NexusTier.T4_MEDIO    -> 250
+            else                                          -> 80
+        }
+        particleSystem.setDensity(count)
+    }
 }
