@@ -19,7 +19,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
@@ -126,6 +125,7 @@ fun SolarSystemScreen(
             val cy    = h / 2f
             val scale = minOf(w, h) / 1200f
             val t     = time * 0.001f
+            val nativeCanvas = drawContext.canvas.nativeCanvas
 
             textPaintName.textSize = (12f * scale * 80f).coerceIn(22f, 38f)
             textPaintDesc.textSize = (9f  * scale * 80f).coerceIn(16f, 28f)
@@ -147,9 +147,7 @@ fun SolarSystemScreen(
                     android.graphics.Shader.TileMode.CLAMP
                 )
                 nebulaPaint.shader = shader
-                drawIntoCanvas { c ->
-                    c.nativeCanvas.drawCircle(nx, ny, nRadius, nebulaPaint)
-                }
+                nativeCanvas.drawCircle(nx, ny, nRadius, nebulaPaint)
             }
 
             SolarSystem.PLANETS.forEach { planet ->
@@ -176,9 +174,7 @@ fun SolarSystemScreen(
             drawCircle(color = Color(0xFFFFB300), radius = sunR,         center = Offset(cx, cy))
             drawCircle(color = Color(0xFFFF8F00), radius = sunR * 0.7f,  center = Offset(cx, cy))
 
-            drawIntoCanvas { c ->
-                c.nativeCanvas.drawText("NUCLEO NEXUS", cx, cy - sunR - 10f, textPaintName)
-            }
+            nativeCanvas.drawText("NUCLEO NEXUS", cx, cy - sunR - 10f, textPaintName)
 
             val metricPaint = NativePaint().apply {
                 color       = android.graphics.Color.argb(200, 0, 229, 255)
@@ -186,12 +182,10 @@ fun SolarSystemScreen(
                 isAntiAlias = true
                 textSize    = textPaintDesc.textSize * 0.9f
             }
-            drawIntoCanvas { c ->
-                c.nativeCanvas.drawText(
-                    "CPU ${metrics.cpuPercent}%   FPS ${metrics.fpsCurrent}   GPU ${metrics.gpuPercent}%",
-                    cx, cy + sunR + 26f, metricPaint
-                )
-            }
+            nativeCanvas.drawText(
+                "CPU ${metrics.cpuPercent}%   FPS ${metrics.fpsCurrent}   GPU ${metrics.gpuPercent}%",
+                cx, cy + sunR + 26f, metricPaint
+            )
 
             planetHitAreas.clear()
             SolarSystem.PLANETS.forEach { planet ->
@@ -215,10 +209,8 @@ fun SolarSystemScreen(
                 )
 
                 textPaintName.color = planet.color.toArgb()
-                drawIntoCanvas { c ->
-                    c.nativeCanvas.drawText(planet.name,        px, py - pr - 14f, textPaintName)
-                    c.nativeCanvas.drawText(planet.description, px, py + pr + 20f, textPaintDesc)
-                }
+                nativeCanvas.drawText(planet.name,        px, py - pr - 14f, textPaintName)
+                nativeCanvas.drawText(planet.description, px, py + pr + 20f, textPaintDesc)
             }
         }
 

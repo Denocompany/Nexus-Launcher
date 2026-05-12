@@ -213,6 +213,10 @@ dependencies {
     implementation("org.greenrobot:eventbus:3.3.1")
     implementation("com.moandjiezana.toml:toml4j:0.7.2") { exclude(group = "com.google.code.gson", module = "gson") }
 
+    // Scalable dimension resources (sdp/ssp) — used by existing code
+    implementation("com.intuit.sdp:sdp-android:1.1.0")
+    implementation("com.intuit.ssp:ssp-android:1.1.0")
+
     // ── Nexus Launcher — Jetpack Compose ──────────────────────────────────────
     implementation(platform("androidx.compose:compose-bom:2024.04.01"))
     implementation("androidx.compose.ui:ui")

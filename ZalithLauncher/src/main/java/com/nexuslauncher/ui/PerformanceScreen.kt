@@ -24,7 +24,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -201,6 +200,7 @@ private fun FpsLineChart(fpsHistory: List<Int>, currentFps: Int, modifier: Modif
                else maxOf(120, (((fpsHistory.maxOrNull() ?: 0) / 30 + 1) * 30))
 
     Canvas(modifier = modifier) {
+        val nativeCanvas = drawContext.canvas.nativeCanvas
         if (fpsHistory.size < 2) return@Canvas
         val w = size.width; val h = size.height
         val padL = 36f; val padR = 8f; val padT = 12f; val padB = 12f
@@ -214,17 +214,13 @@ private fun FpsLineChart(fpsHistory: List<Int>, currentFps: Int, modifier: Modif
 
         listOf(0, 30, 60, 90, 120).filter { it <= yMax }.forEach { fps ->
             val y = yOf(fps)
-            drawIntoCanvas { c ->
-                c.nativeCanvas.drawLine(padL, y, w - padR, y, gridPaint)
-                c.nativeCanvas.drawText("$fps", padL - 4f, y + 8f, labelPaint)
-            }
+            nativeCanvas.drawLine(padL, y, w - padR, y, gridPaint)
+            nativeCanvas.drawText("$fps", padL - 4f, y + 8f, labelPaint)
         }
 
         val targetY = yOf(60)
         val targetPaint = android.graphics.Paint().apply { color = android.graphics.Color.argb(120, 255, 109, 0); strokeWidth = 2f; isAntiAlias = true; pathEffect = android.graphics.DashPathEffect(floatArrayOf(8f, 6f), 0f) }
-        drawIntoCanvas { c ->
-            c.nativeCanvas.drawLine(padL, targetY, w - padR, targetY, targetPaint)
-        }
+        nativeCanvas.drawLine(padL, targetY, w - padR, targetY, targetPaint)
 
         val fillPath = Path().apply {
             moveTo(xOf(0), yOf(fpsHistory[0]))
@@ -251,15 +247,11 @@ private fun FpsLineChart(fpsHistory: List<Int>, currentFps: Int, modifier: Modif
         drawCircle(color = Color.White, radius = 2f, center = Offset(lastX, lastY))
 
         val floatLabelPaint = android.graphics.Paint().apply { color = android.graphics.Color.WHITE; textSize = 24f; isFakeBoldText = true; isAntiAlias = true; textAlign = android.graphics.Paint.Align.CENTER }
-        drawIntoCanvas { c ->
-            c.nativeCanvas.drawText("${fpsHistory.last()} FPS", lastX, (lastY - 14f).coerceAtLeast(padT + 24f), floatLabelPaint)
-        }
+        nativeCanvas.drawText("${fpsHistory.last()} FPS", lastX, (lastY - 14f).coerceAtLeast(padT + 24f), floatLabelPaint)
 
         val dropPaint = android.graphics.Paint().apply { color = android.graphics.Color.argb(180, 255, 50, 50); strokeWidth = 2f; isAntiAlias = true }
         fpsHistory.forEachIndexed { i, fps ->
-            if (fps < 30) drawIntoCanvas { c ->
-                c.nativeCanvas.drawCircle(xOf(i), yOf(fps), 4f, dropPaint)
-            }
+            if (fps < 30) nativeCanvas.drawCircle(xOf(i), yOf(fps), 4f, dropPaint)
         }
     }
 }
