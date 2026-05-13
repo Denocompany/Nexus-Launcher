@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Divider
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Switch
@@ -23,175 +24,206 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nexuslauncher.core.NexusModManager
 import com.nexuslauncher.datastore.NexusDataStore
 import com.nexuslauncher.ui.theme.DeepVoid
 import com.nexuslauncher.ui.theme.NexusCyan
 import com.nexuslauncher.ui.theme.NexusOrange
 import com.nexuslauncher.ui.theme.Obsidian
 import com.nexuslauncher.ui.theme.TextSecondary
-import com.nexuslauncher.viewmodel.ModsViewModel
+import kotlinx.coroutines.launch
 
-data class ModItem(
-    val id          : String,
-    val name        : String,
-    val version     : String,
-    val author      : String  = "Autor desconhecido",
-    val needsUpdate : Boolean = false,
-    val enabled     : Boolean = true
-)
-
-data class ResourcePack(
-    val id      : String,
-    val name    : String,
-    val version : String,
-    val enabled : Boolean = false,
-    val priority: Int     = 0
-)
-
+/**
+ * ModsScreen — MODARA conectado ao NexusModManager real.
+ * Lê mods reais do disco da instância selecionada.
+ * Ativa/desativa movendo entre /mods e /mods.disabled.
+ */
 @Composable
 fun ModsScreen(
     nexusDataStore   : NexusDataStore? = null,
-    onBackToInstances: () -> Unit = {},
-    onOpenVisual     : () -> Unit = {},
-    onBackToSolar    : () -> Unit = {}
+    instanceDir      : String          = "",
+    onBackToInstances: () -> Unit       = {},
+    onOpenVisual     : () -> Unit       = {},
+    onBackToSolar    : () -> Unit       = {}
 ) {
-    val vm: ModsViewModel? = nexusDataStore?.let {
-        viewModel(factory = ModsViewModel.factory(it))
-    }
-    val savedModsEnabled by (vm?.modsEnabled ?: kotlinx.coroutines.flow.flowOf(emptySet<String>())).collectAsState(initial = emptySet())
-    val savedPacksEnabled by (vm?.resourcePacksEnabled ?: kotlinx.coroutines.flow.flowOf(emptySet<String>())).collectAsState(initial = emptySet())
+    val scope    = rememberCoroutineScope()
+    val mods     by NexusModManager.mods.collectAsState()
+    val loading  by NexusModManager.loading.collectAsState()
 
-    val mods = remember {
-        mutableStateListOf(
-            ModItem("1", "Nexus Textures",  "v2.3",    "NexusTeam", enabled = true),
-            ModItem("2", "Shader HDR",      "1.3",     "ShaderDev",  needsUpdate = true, enabled = true),
-            ModItem("3", "FeatCraft Pro",   "v1.22",   "FeatLabs",  enabled = true),
-            ModItem("4", "Dynamic Lights",  "v1.0",    "SpeedyCom", enabled = true),
-            ModItem("5", "OptiFine HD",     "v1.18.2", "sp614x",    enabled = false),
-            ModItem("6", "JEI",             "v11.6.0", "mezz",      enabled = true),
-        )
-    }
-    val resourcePacks = remember {
-        mutableStateListOf(
-            ResourcePack("1", "Faithful 32x",    "1.20.x", priority = 1),
-            ResourcePack("2", "Sphax PureBDCraft","1.16.x", enabled = true, priority = 2),
-            ResourcePack("3", "Default Tweaked", "1.x",    priority = 3),
-        )
-    }
+    var selectedTab  by remember { mutableStateOf(0) }
+    var searchQuery  by remember { mutableStateOf("") }
+    val tabs = listOf("Mods", "Resource Packs")
 
-    // Sync enabled state from DataStore on first load
-    LaunchedEffect(savedModsEnabled) {
-        if (savedModsEnabled.isNotEmpty()) {
-            mods.forEachIndexed { i, mod ->
-                mods[i] = mod.copy(enabled = savedModsEnabled.contains(mod.id))
-            }
-        }
-    }
-    LaunchedEffect(savedPacksEnabled) {
-        if (savedPacksEnabled.isNotEmpty()) {
-            resourcePacks.forEachIndexed { i, pack ->
-                resourcePacks[i] = pack.copy(enabled = savedPacksEnabled.contains(pack.id))
-            }
+    // Load mods when instance dir changes
+    LaunchedEffect(instanceDir) {
+        if (instanceDir.isNotEmpty()) {
+            NexusModManager.loadMods(instanceDir)
         }
     }
 
-    var selectedTab by remember { mutableStateOf(0) }
-    var searchQuery by remember { mutableStateOf("") }
-    val tabs = listOf("Instalados", "Downloads", "Pacotes de Textura")
+    val filteredMods = mods.filter {
+        searchQuery.isEmpty() || it.name.contains(searchQuery, ignoreCase = true) ||
+        it.author.contains(searchQuery, ignoreCase = true)
+    }
 
-    Column(modifier = Modifier.fillMaxSize().background(DeepVoid).verticalScroll(rememberScrollState()).padding(16.dp)) {
+    Column(Modifier.fillMaxSize().background(DeepVoid).verticalScroll(rememberScrollState()).padding(16.dp)) {
+
+        // Header
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column {
-                Text("MODS & PLUGINS", color = NexusCyan, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
-                Text("${mods.count { it.enabled }} ativos · ${mods.size} instalados · ${resourcePacks.count { it.enabled }} resource pack(s)", color = TextSecondary, fontSize = 11.sp)
+                Text("MODARA", color = NexusCyan, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
+                Text(NexusModManager.activeCountLabel(), color = TextSecondary, fontSize = 11.sp)
             }
-            if (mods.any { it.needsUpdate }) Box(Modifier.clip(RoundedCornerShape(6.dp)).background(NexusOrange.copy(0.15f)).border(1.dp, NexusOrange, RoundedCornerShape(6.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) { Text("${mods.count { it.needsUpdate }} update(s)", color = NexusOrange, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+            if (loading) {
+                CircularProgressIndicator(color = NexusCyan, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+            }
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Search bar
+        OutlinedTextField(
+            value = searchQuery, onValueChange = { searchQuery = it },
+            label = { Text("Buscar mods...", color = TextSecondary, fontSize = 11.sp) },
+            modifier = Modifier.fillMaxWidth(),
+            colors = TextFieldDefaults.outlinedTextFieldColors(
+                focusedBorderColor = NexusCyan, unfocusedBorderColor = Color(0xFF333340),
+                textColor = Color.White, cursorColor = NexusCyan
+            ), singleLine = true
+        )
+        Spacer(Modifier.height(10.dp))
+
+        // Tabs
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             tabs.forEachIndexed { i, tab ->
-                Box(modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(if (selectedTab == i) NexusCyan.copy(0.15f) else Color(0xFF111120)).border(1.dp, if (selectedTab == i) NexusCyan else Color.Transparent, RoundedCornerShape(20.dp)).clickable { selectedTab = i }.padding(horizontal = 14.dp, vertical = 7.dp)) {
-                    Text(tab, color = if (selectedTab == i) NexusCyan else TextSecondary, fontSize = 11.sp, fontWeight = if (selectedTab == i) FontWeight.Bold else FontWeight.Normal)
+                Box(Modifier.clip(RoundedCornerShape(20.dp))
+                    .background(if (selectedTab == i) NexusCyan.copy(0.15f) else Color(0xFF111120))
+                    .border(1.dp, if (selectedTab == i) NexusCyan else Color.Transparent, RoundedCornerShape(20.dp))
+                    .clickable { selectedTab = i }.padding(horizontal = 14.dp, vertical = 8.dp)) {
+                    Text(tab, color = if (selectedTab == i) NexusCyan else TextSecondary, fontSize = 11.sp,
+                        fontWeight = if (selectedTab == i) FontWeight.Bold else FontWeight.Normal)
                 }
             }
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(12.dp))
 
         when (selectedTab) {
             0 -> {
-                Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Obsidian), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    mods.forEachIndexed { idx, mod ->
-                        Row(modifier = Modifier.fillMaxWidth().background(if (mod.enabled) Color(0xFF141420) else Color(0xFF0E0E18)).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                            Column(Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(mod.name, color = if (mod.enabled) Color.White else TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                                    if (mod.needsUpdate) Box(Modifier.clip(RoundedCornerShape(4.dp)).background(NexusOrange.copy(0.2f)).padding(horizontal = 6.dp, vertical = 2.dp)) { Text("ATUALIZAR", color = NexusOrange, fontSize = 8.sp, fontWeight = FontWeight.Bold) }
-                                }
-                                Text("${mod.version} · por ${mod.author}", color = TextSecondary, fontSize = 10.sp)
-                            }
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (mod.needsUpdate) Box(modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(NexusOrange.copy(0.15f)).clickable { mods[idx] = mod.copy(needsUpdate = false, version = "${mod.version}+1") }.padding(horizontal = 8.dp, vertical = 4.dp)) { Text("⬆", color = NexusOrange, fontSize = 12.sp) }
-                                Switch(checked = mod.enabled, onCheckedChange = { enabled ->
-                                    mods[idx] = mod.copy(enabled = enabled)
-                                    vm?.updateModsEnabled(mods.filter { it.enabled }.map { it.id }.toSet())
-                                }, colors = SwitchDefaults.colors(checkedThumbColor = NexusCyan, checkedTrackColor = NexusCyan.copy(0.4f)))
-                            }
+                // Mods tab
+                if (instanceDir.isEmpty()) {
+                    InfoBox("Selecione uma instância em INSTARRION para ver os mods.", NexusOrange)
+                } else if (filteredMods.isEmpty() && !loading) {
+                    Box(Modifier.fillMaxWidth().padding(vertical = 30.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🧩", fontSize = 40.sp)
+                            Spacer(Modifier.height(8.dp))
+                            Text("Nenhum mod encontrado", color = TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("Instale mods na pasta /mods da instância", color = TextSecondary, fontSize = 11.sp)
                         }
-                        if (idx < mods.size - 1) Divider(color = Color(0xFF1A1A28), thickness = 1.dp)
                     }
-                }
-                Spacer(Modifier.height(12.dp))
-                Button(onClick = { mods.indices.forEach { mods[it] = mods[it].copy(needsUpdate = false) } }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(backgroundColor = NexusCyan)) { Text("⬆ ATUALIZAR TUDO", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp) }
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { selectedTab = 1 }, modifier = Modifier.weight(1f).height(42.dp), shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF1C1C2E))) { Text("+ Adicionar Mod", color = NexusCyan, fontSize = 11.sp) }
-                    Button(onClick = {}, modifier = Modifier.weight(1f).height(42.dp), shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF1C1C2E))) { Text("📂 Importar .jar", color = NexusCyan, fontSize = 11.sp) }
+                } else {
+                    // Group by loader
+                    val byLoader = filteredMods.groupBy { it.loader.replaceFirstChar { c -> c.uppercase() } }
+                    byLoader.forEach { (loader, loaderMods) ->
+                        val loaderColor = when (loader.lowercase()) {
+                            "fabric"   -> Color(0xFFB3E5FC)
+                            "forge"    -> NexusOrange
+                            "quilt"    -> Color(0xFF7B61FF)
+                            "neoforge" -> Color(0xFFFF6D00)
+                            else       -> TextSecondary
+                        }
+                        Text(loader.uppercase(), color = loaderColor, fontSize = 10.sp, letterSpacing = 1.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(6.dp))
+                        loaderMods.forEach { mod ->
+                            ModItem(mod, instanceDir, scope)
+                            Spacer(Modifier.height(4.dp))
+                        }
+                        Spacer(Modifier.height(10.dp))
+                    }
                 }
             }
             1 -> {
-                val searchResults = remember { listOf(ModItem("d1", "Just Enough Items (JEI)", "v13.0", "mezz"), ModItem("d2", "Waystones", "v14.1", "BlayTheNinth"), ModItem("d3", "Biomes O' Plenty", "v18.0", "Forstride"), ModItem("d4", "Applied Energistics 2", "v15.0", "AlgorithmX2"), ModItem("d5", "Tinkers' Construct", "v3.8", "mDiyo"), ModItem("d6", "Create", "v0.5.1", "simibubi")) }
-                OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), label = { Text("🔍 Buscar no CurseForge Orbital...", color = TextSecondary, fontSize = 11.sp) }, singleLine = true, colors = TextFieldDefaults.outlinedTextFieldColors(textColor = Color.White, focusedBorderColor = NexusCyan, unfocusedBorderColor = TextSecondary.copy(0.4f), cursorColor = NexusCyan))
-                Spacer(Modifier.height(12.dp))
-                Text("Mods populares para 1.18.2", color = TextSecondary, fontSize = 11.sp); Spacer(Modifier.height(8.dp))
-                val filtered = if (searchQuery.isBlank()) searchResults else searchResults.filter { it.name.contains(searchQuery, ignoreCase = true) }
-                Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Obsidian), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    filtered.forEach { mod ->
-                        val alreadyInstalled = mods.any { it.name == mod.name }
-                        Row(modifier = Modifier.fillMaxWidth().background(Color(0xFF141420)).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                            Column(Modifier.weight(1f)) { Text(mod.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold); Text("${mod.version} · ${mod.author}", color = TextSecondary, fontSize = 10.sp) }
-                            Box(modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(if (alreadyInstalled) Color(0xFF00E676).copy(0.1f) else NexusCyan.copy(0.1f)).border(1.dp, if (alreadyInstalled) Color(0xFF00E676).copy(0.4f) else NexusCyan.copy(0.4f), RoundedCornerShape(6.dp)).clickable { if (!alreadyInstalled) { mods.add(mod.copy(id = System.currentTimeMillis().toString())); selectedTab = 0 } }.padding(horizontal = 10.dp, vertical = 5.dp)) {
-                                Text(if (alreadyInstalled) "✓ Instalado" else "⬇ Instalar", color = if (alreadyInstalled) Color(0xFF00E676) else NexusCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                    if (filtered.isEmpty()) Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Text("Nenhum resultado para \"$searchQuery\"", color = TextSecondary, fontSize = 12.sp) }
-                }
-            }
-            2 -> {
-                Text("RESOURCE PACKS INSTALADOS", color = TextSecondary, fontSize = 11.sp); Spacer(Modifier.height(8.dp))
-                Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Obsidian), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    resourcePacks.forEachIndexed { idx, pack ->
-                        Row(modifier = Modifier.fillMaxWidth().background(Color(0xFF141420)).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Box(Modifier.size(40.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFF7B61FF).copy(0.15f)).border(1.dp, Color(0xFF7B61FF).copy(0.3f), RoundedCornerShape(6.dp)), contentAlignment = Alignment.Center) { Text("🎨", fontSize = 18.sp) }
-                                Column { Text(pack.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold); Text("${pack.version} · Prioridade ${pack.priority}", color = TextSecondary, fontSize = 10.sp) }
-                            }
-                            Switch(checked = pack.enabled, onCheckedChange = { enabled ->
-                                resourcePacks[idx] = pack.copy(enabled = enabled)
-                                vm?.updateResourcePacksEnabled(resourcePacks.filter { it.enabled }.map { it.id }.toSet())
-                            }, colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF7B61FF), checkedTrackColor = Color(0xFF7B61FF).copy(0.4f)))
-                        }
-                        if (idx < resourcePacks.size - 1) Divider(color = Color(0xFF1A1A28), thickness = 1.dp)
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {}, modifier = Modifier.weight(1f).height(44.dp), shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF1C1C2E))) { Text("📂 Importar Pack (.zip)", color = Color(0xFF7B61FF), fontSize = 11.sp) }
-                    Button(onClick = { selectedTab = 1 }, modifier = Modifier.weight(1f).height(44.dp), shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF1C1C2E))) { Text("🔍 Buscar Online", color = NexusCyan, fontSize = 11.sp) }
-                }
+                // Resource packs
+                val rpDir = "$instanceDir/resourcepacks"
+                InfoBox("Pasta de resource packs: $rpDir\nInstale arquivos .zip nessa pasta e reinicie o launcher.", NexusCyan)
             }
         }
+
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onBackToInstances, modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(backgroundColor = Obsidian), shape = RoundedCornerShape(8.dp)) {
+                Text("← Instâncias", color = TextSecondary, fontSize = 12.sp)
+            }
+            Button(onClick = onBackToSolar, modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(backgroundColor = NexusCyan.copy(0.15f)), shape = RoundedCornerShape(8.dp)) {
+                Text("← Solar", color = NexusCyan, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModItem(
+    mod         : NexusModManager.NexusMod,
+    instanceDir : String,
+    scope       : kotlinx.coroutines.CoroutineScope
+) {
+    val loaderColor = when (mod.loader.lowercase()) {
+        "fabric"   -> Color(0xFFB3E5FC)
+        "forge"    -> NexusOrange
+        "quilt"    -> Color(0xFF7B61FF)
+        "neoforge" -> Color(0xFFFF6D00)
+        else       -> TextSecondary
+    }
+
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+        .background(Color(0xFF0E0E16))
+        .border(1.dp, if (mod.isEnabled) Color(0xFF1A1A26) else Color(0xFF222222), RoundedCornerShape(10.dp))
+        .padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+
+        // Status dot
+        Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp))
+            .background(if (mod.isEnabled) Color(0xFF00E676) else Color(0xFF444455)))
+
+        // Mod info
+        Column(Modifier.weight(1f)) {
+            Text(mod.name, color = if (mod.isEnabled) Color.White else TextSecondary,
+                fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("v${mod.version}", color = TextSecondary, fontSize = 10.sp)
+                if (mod.author != "Desconhecido") Text("· ${mod.author}", color = TextSecondary, fontSize = 10.sp)
+                if (mod.fileSizeKb > 0) Text("· ${mod.fileSizeKb}KB", color = TextSecondary, fontSize = 9.sp)
+            }
+        }
+
+        // Toggle
+        Switch(
+            checked  = mod.isEnabled,
+            onCheckedChange = { enabled ->
+                scope.launch {
+                    if (enabled) NexusModManager.enableMod(mod.filePath, instanceDir)
+                    else NexusModManager.disableMod(mod.filePath, instanceDir)
+                }
+            },
+            colors = SwitchDefaults.colors(checkedThumbColor = NexusCyan, checkedTrackColor = NexusCyan.copy(0.5f),
+                uncheckedThumbColor = TextSecondary, uncheckedTrackColor = TextSecondary.copy(0.3f))
+        )
+
+        // Remove
+        Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0xFFCF4455).copy(0.15f))
+            .border(1.dp, Color(0xFFCF4455).copy(0.3f), RoundedCornerShape(6.dp))
+            .clickable { scope.launch { NexusModManager.removeMod(mod.filePath, instanceDir) } }
+            .padding(horizontal = 8.dp, vertical = 4.dp)) {
+            Text("🗑", fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun InfoBox(text: String, color: Color) {
+    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+        .background(color.copy(0.08f)).border(1.dp, color.copy(0.3f), RoundedCornerShape(10.dp))
+        .padding(12.dp)) {
+        Text(text, color = color, fontSize = 12.sp)
     }
 }
