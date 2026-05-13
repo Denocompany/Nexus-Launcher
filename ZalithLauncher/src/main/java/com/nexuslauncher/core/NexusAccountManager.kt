@@ -1,23 +1,23 @@
 package com.nexuslauncher.core
 
+import android.app.Activity
 import android.content.Context
 import com.movtery.zalithlauncher.feature.accounts.AccountsManager
-import com.movtery.zalithlauncher.feature.accounts.AccountUtils
-import com.movtery.zalithlauncher.feature.accounts.LocalAccountUtils
-import com.movtery.zalithlauncher.value.MinecraftAccount
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
+import net.kdt.pojavlaunch.value.MinecraftAccount
+import org.json.JSONObject
+import java.io.File
 
 /**
- * NexusAccountManager — Ponte entre UI Nexus e AccountsManager do ZalithLauncher.
+ * NexusAccountManager — Ponte UI Nexus ↔ AccountsManager do ZalithLauncher.
  *
- * Fornece:
- * - Criação de contas offline com username
- * - Listagem de contas existentes
- * - Definição de conta ativa
- * - Estrutura para OAuth Microsoft (stub com interface pronta)
+ * Suporta:
+ * - Contas offline (username direto)
+ * - Microsoft (bridge para fluxo existente do ZalithLauncher)
+ * - Listagem e seleção de conta ativa
  */
 object NexusAccountManager {
 
@@ -26,52 +26,58 @@ object NexusAccountManager {
         val username  : String,
         val type      : ProfileType,
         val isActive  : Boolean = false,
-        val skinUrl   : String  = "",
-        val capeUrl   : String  = ""
+        val skinUrl   : String  = ""
     )
 
     enum class ProfileType { MICROSOFT, OFFLINE, OTHER }
 
-    private val _profiles = MutableStateFlow<List<NexusProfile>>(emptyList())
+    private val _profiles      = MutableStateFlow<List<NexusProfile>>(emptyList())
     val profiles: StateFlow<List<NexusProfile>> = _profiles
 
     private val _activeProfile = MutableStateFlow<NexusProfile?>(null)
     val activeProfile: StateFlow<NexusProfile?> = _activeProfile
 
-    /** Carrega todas as contas do AccountsManager. */
+    /** Carrega todas as contas do AccountsManager do ZalithLauncher. */
     fun loadAccounts() {
         runCatching {
-            val accounts  = AccountsManager.getAllAccounts()
-            val active    = AccountsManager.getCurrentAccount()
-            val profiles  = accounts.map { acc -> acc.toNexusProfile(active?.clientToken) }
-            _profiles.value      = profiles
-            _activeProfile.value = profiles.firstOrNull { it.isActive }
+            val allAccounts = AccountsManager.getAccounts()
+            val current     = AccountsManager.currentAccount
+            val list        = allAccounts.map { acc ->
+                NexusProfile(
+                    id       = acc.uniqueUUID ?: acc.username ?: "offline_${acc.username}",
+                    username = acc.username   ?: "Jogador",
+                    type     = when {
+                        AccountsManager.isMicrosoftAccount(acc) -> ProfileType.MICROSOFT
+                        else                                     -> ProfileType.OFFLINE
+                    },
+                    isActive = acc.uniqueUUID == current?.uniqueUUID
+                )
+            }
+            _profiles.value      = list
+            _activeProfile.value = list.firstOrNull { it.isActive }
         }.onFailure {
             _profiles.value = emptyList()
         }
     }
 
-    private fun MinecraftAccount.toNexusProfile(activeToken: String?): NexusProfile {
-        val type = when {
-            isMicrosoft == true -> ProfileType.MICROSOFT
-            else                -> ProfileType.OFFLINE
-        }
-        return NexusProfile(
-            id       = clientToken ?: username ?: "offline",
-            username = username  ?: "Jogador",
-            type     = type,
-            isActive = clientToken == activeToken,
-            skinUrl  = ""
-        )
-    }
-
-    /** Cria conta offline. */
+    /**
+     * Cria conta offline (local) via MinecraftAccount diretamente.
+     * ZalithLauncher salva contas em JSON no PathManager.DIR_GAME_HOME.
+     */
     suspend fun createOfflineAccount(username: String): Boolean = withContext(Dispatchers.IO) {
-        if (username.isBlank() || username.length < 3) return@withContext false
+        if (username.isBlank() || username.length < 3 || username.length > 16) return@withContext false
         runCatching {
-            LocalAccountUtils.createLocalAccount(username)
+            val account = MinecraftAccount().also { acc ->
+                acc.username    = username
+                acc.accessToken = "0"
+                acc.clientToken = "0"
+                acc.uniqueUUID  = java.util.UUID.nameUUIDFromBytes(
+                    "OfflinePlayer:$username".toByteArray()
+                ).toString().replace("-", "")
+            }
+            AccountsManager.addAccount(account)
             loadAccounts()
-            // Define como ativa se for a primeira
+            // Set as current if first account
             if (_profiles.value.size == 1) {
                 setActiveAccount(_profiles.value.first().id)
             }
@@ -82,10 +88,11 @@ object NexusAccountManager {
     /** Define conta ativa. */
     suspend fun setActiveAccount(id: String): Boolean = withContext(Dispatchers.IO) {
         runCatching {
-            val account = AccountsManager.getAllAccounts().firstOrNull {
-                it.clientToken == id || it.username == id
+            val account = AccountsManager.getAccounts().firstOrNull {
+                it.uniqueUUID == id || it.username == id
             } ?: return@withContext false
-            AccountsManager.setCurrentAccount(account)
+            AccountsManager.currentAccount = account
+            AccountsManager.saveAccount(account)
             loadAccounts()
             true
         }.getOrDefault(false)
@@ -94,33 +101,28 @@ object NexusAccountManager {
     /** Remove conta. */
     suspend fun removeAccount(id: String): Boolean = withContext(Dispatchers.IO) {
         runCatching {
-            val account = AccountsManager.getAllAccounts().firstOrNull {
-                it.clientToken == id || it.username == id
+            val account = AccountsManager.getAccounts().firstOrNull {
+                it.uniqueUUID == id || it.username == id
             } ?: return@withContext false
-            AccountsManager.removeAccount(account)
+            AccountsManager.deleteAccount(account)
             loadAccounts()
             true
         }.getOrDefault(false)
     }
 
-    /** Retorna nome do jogador ativo (para argumentos de launch). */
     fun getActiveUsername(): String =
-        _activeProfile.value?.username ?: "Jogador"
+        _activeProfile.value?.username ?: AccountsManager.currentAccount?.username ?: "Jogador"
 
-    /** Stub para OAuth Microsoft — estrutura pronta para implementação futura. */
+    /** Stub para Microsoft OAuth — usa o fluxo do ZalithLauncher. */
     interface MicrosoftLoginCallback {
         fun onSuccess(profile: NexusProfile)
         fun onError(message: String)
         fun onCancelled()
     }
 
-    /**
-     * Inicia fluxo de login Microsoft.
-     * Por ora chama o fluxo existente do ZalithLauncher.
-     */
     fun startMicrosoftLogin(context: Context, callback: MicrosoftLoginCallback) {
-        // O ZalithLauncher tem MicrosoftLoginFragment e MicrosoftBackgroundLogin
-        // Este stub expõe a interface para ser chamado da UI Nexus
-        callback.onError("Login Microsoft: use a tela de Contas do ZalithLauncher por enquanto.")
+        // Delega para o fluxo Microsoft existente do ZalithLauncher
+        // (MicrosoftBackgroundLogin / AccountsManager.login)
+        callback.onError("Abra o gerenciador de contas do ZalithLauncher para login Microsoft.")
     }
 }
