@@ -1,65 +1,239 @@
 <div align="center">
-    <img width="256" src="ZalithLauncher/src/main/res/drawable/app_name_title.png"></img>
+
+# ⚡ NEXUS LAUNCHER
+
+**A professional Android Minecraft launcher built on ZalithLauncher/PojavLauncher**  
+*Forge, Fabric, Quilt, NeoForge · Solar System Navigation UI · Real-time Telemetry*
+
+[![Version](https://img.shields.io/badge/version-2.0.0.0-00E5FF?style=for-the-badge)](https://github.com/Denocompany/Nexus-Launcher/releases)
+[![Platform](https://img.shields.io/badge/platform-Android%208.0+-green?style=for-the-badge&logo=android)](https://developer.android.com)
+[![Engine](https://img.shields.io/badge/engine-ZalithLauncher-FF6D00?style=for-the-badge)](https://github.com/ZalithLauncher/ZalithLauncher)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=for-the-badge)](LICENSE)
+
 </div>
+
+---
+
+## 🪐 What is Nexus Launcher?
+
+Nexus Launcher is a fully-featured Minecraft: Java Edition launcher for Android, built on top of the proven [ZalithLauncher](https://github.com/ZalithLauncher/ZalithLauncher) (PojavLauncher fork) engine. It replaces the stock launcher UI with a completely custom **Solar System navigation interface** built in Jetpack Compose, where each "planet" represents a module of the launcher.
+
+### Key Differentiators
+
+| Feature | Nexus Launcher | ZalithLauncher |
+|---------|---------------|----------------|
+| Navigation UI | Solar System (Compose) | Fragment-based |
+| Instance Management | Isolated folder structure | Shared .minecraft |
+| Performance Monitor | Real-time CPU/RAM/FPS | Basic |
+| Boost Engine | 1-click optimization | Manual |
+| Session Tracker | Full history + export | None |
+| Theme System | LUMINA design system | Material |
+
+---
+
+## 🌌 Solar System Navigation
+
+Each planet in the solar system maps to a launcher module:
+
+| Planet | Module | Description |
+|--------|--------|-------------|
+| ☀️ **Núcleo Nexus** | Sun / Hub | Central navigation |
+| 🔵 **NEXUS PRIME** | Home | Last instance, quick launch, system status |
+| 🟠 **AETHERION** | Performance | CPU/RAM/FPS monitor, Nexus Boost |
+| 🔷 **LUMINA** | Visual | Shaders, HDR, themes, accessibility |
+| 🟢 **MODARA** | Mods | Real mod scanning (Fabric/Forge/Quilt metadata) |
+| 🔴 **CURSEFORGE ORBITAL** | Download | Version/mod installer |
+| ⚫ **INSTARRION** | Instances | Create/manage game instances |
+| ⬜ **CHRONOS** | Reports | Session history, FPS analytics |
+| 🔵 **PERSONA** | Accounts | Offline + Microsoft OAuth accounts |
+| 🌤 **CLOUD NEXUS** | Backups | Save backup & restore |
+| 🟣 **LAB-X** | Experimental | Beta features |
+| 🟡 **HELIOS CONTROL** | Settings | Full launcher configuration |
+
+---
+
+## ✨ Features
+
+### Instance Management (`NexusInstanceManager`)
+- Full isolated `.minecraft` folder structure per instance
+- Versions: Vanilla, Fabric, Forge, NeoForge, Quilt
+- Supports: `1.7.10` through `1.21.4`
+- Import existing PojavLauncher instances automatically
+- Favorite, rename, duplicate, remove instances
+- Custom base directory (internal or external storage)
+
+### Download System (`NexusDownloadManager`)
+- Integrates with `GameInstaller` from ZalithLauncher
+- Downloads vanilla client + libraries + assets via Mojang API
+- Installs Fabric/Forge/Quilt/NeoForge loaders
+- Real-time progress bar in UI
+
+### Mod Manager (`NexusModManager`)
+- Scans real `.jar` files in `/mods` folder
+- Parses metadata from `fabric.mod.json`, `META-INF/mods.toml`, `quilt.mod.json`
+- Enable/disable mods by moving between `/mods` and `/mods.disabled`
+- Shows: name, version, author, file size, loader type
+
+### Account System (`NexusAccountManager`)
+- Offline accounts (create/remove/switch)
+- Microsoft OAuth (bridges to ZalithLauncher's `MicrosoftBackgroundLogin`)
+- Active account persisted via DataStore
+
+### System Monitor (`NexusSystemMonitor`)
+- Real `/proc/stat` CPU parsing
+- RAM via `ActivityManager.MemoryInfo`
+- GPU usage estimation
+- Thermal throttling detection
+- FPS tracking via frame callback
+
+### Session Tracker (`NexusSessionTracker`)
+- Records start/end time, instance name, FPS avg/min/max
+- Persists to JSON in launcher base dir (last 50 sessions)
+- Exports to formatted text report
+- Powers CHRONOS analytics dashboard
+
+### Performance Tier Engine
+- `TierDecisionEngine`: auto-detects device tier (T1–T5)
+- `TierProfile`: optimal presets per tier (FPS, renderer, effects)
+- `NexusBoostEngine`: 1-click GC + trim + preset application
+
+---
+
+## 🛠 Architecture
+
+```
+ZalithLauncher/src/main/java/
+├── com/nexuslauncher/
+│   ├── NexusMainActivity.kt         ← Entry point (Compose)
+│   ├── core/
+│   │   ├── NexusInstanceManager.kt  ← Instance CRUD + folder structure
+│   │   ├── NexusDownloadManager.kt  ← Version + loader download
+│   │   ├── NexusLaunchManager.kt    ← Game launch bridge
+│   │   ├── NexusModManager.kt       ← Real mod scanning (JAR metadata)
+│   │   ├── NexusAccountManager.kt   ← Account bridge to ZalithLauncher
+│   │   ├── NexusSessionTracker.kt   ← Session recording + JSON persist
+│   │   ├── NexusSetupChecker.kt     ← First-run checklist
+│   │   ├── NexusSystemMonitor.kt    ← CPU/RAM/FPS real-time monitor
+│   │   ├── NexusBoostEngine.kt      ← 1-click optimization
+│   │   ├── TierDecisionEngine.kt    ← Hardware tier detection
+│   │   └── TierProfile.kt           ← Tier presets
+│   ├── datastore/
+│   │   ├── NexusDataStore.kt        ← Jetpack DataStore (all settings)
+│   │   └── NexusKeys.kt             ← DataStore preference keys
+│   ├── navigation/
+│   │   ├── NexusNavHost.kt          ← Compose NavHost
+│   │   ├── NexusRoute.kt            ← Route definitions
+│   │   └── PlanetId.kt              ← Planet enum
+│   ├── ui/
+│   │   ├── solar/
+│   │   │   ├── SolarSystemScreen.kt ← Animated solar system canvas
+│   │   │   ├── SolarSystemViewModel.kt
+│   │   │   └── PlanetNode.kt        ← Planet data model
+│   │   ├── HomeScreen.kt            ← NEXUS PRIME
+│   │   ├── PerformanceScreen.kt     ← AETHERION
+│   │   ├── VisualScreen.kt          ← LUMINA
+│   │   ├── ModsScreen.kt            ← MODARA
+│   │   ├── InstancesScreen.kt       ← INSTARRION
+│   │   ├── ReportsScreen.kt         ← CHRONOS
+│   │   ├── AccountsScreen.kt        ← PERSONA
+│   │   └── SettingsScreen.kt        ← HELIOS CONTROL
+│   └── theme/
+│       └── NexusTheme.kt            ← NEXUS design system
+└── com/movtery/zalithlauncher/       ← ZalithLauncher engine (unchanged)
+    ├── launch/LaunchGame.kt
+    ├── feature/version/              ← VersionsManager, GameInstaller
+    ├── feature/accounts/             ← AccountsManager, LocalAccountUtils
+    └── tasks/MinecraftDownloader.kt
+```
+
+---
+
+## 🚀 Building
+
+### Prerequisites
+- Android Studio Hedgehog (2023.1.1) or later
+- JDK 17+
+- Android SDK API 34
+- NDK r25c (for native libraries)
+
+### Build Steps
+
+```bash
+# Clone
+git clone https://github.com/Denocompany/Nexus-Launcher.git
+cd Nexus-Launcher
+
+# Debug APK
+./gradlew :ZalithLauncher:assembleDebug
+
+# Release APK (requires signing config)
+./gradlew :ZalithLauncher:assembleRelease
+```
+
+### Signing Release APK
+
+```bash
+# Generate keystore (first time only)
+keytool -genkey -v -keystore nexus-release.jks \
+  -alias nexus -keyalg RSA -keysize 2048 -validity 10000
+
+# Configure in ZalithLauncher/build.gradle:
+# signingConfigs { release { ... } }
+```
+
+---
+
+## 📋 Requirements
+
+| Requirement | Minimum | Recommended |
+|-------------|---------|-------------|
+| Android | 8.0 (API 26) | 11.0+ (API 30+) |
+| RAM | 3 GB | 6 GB+ |
+| Storage | 1 GB free | 4 GB+ free |
+| CPU | 4 cores | 8 cores (Snapdragon 865+) |
+| GPU | OpenGL ES 3.0 | Vulkan 1.1+ |
+
+---
+
+## 🎮 Usage
+
+1. **First Launch**: Nexus Launcher guides you through a setup checklist in HELIOS CONTROL
+2. **Set Game Path**: Configure where instances are stored (Settings → Game)
+3. **Create Account**: Go to PERSONA → Add Offline or Microsoft account
+4. **Create Instance**: Go to INSTARRION → "+ Nova" → select version + loader
+5. **Install**: The launcher downloads Minecraft + loader automatically
+6. **Play**: NEXUS PRIME → INICIAR JOGO
+
+---
+
+## 📦 Application Info
+
+| Field | Value |
+|-------|-------|
+| Application ID | `com.denocompany.nexuslauncher` |
+| Version Name | `2.0.0.0` |
+| Version Code | `200000` |
+| Min SDK | `26` (Android 8.0) |
+| Target SDK | `34` (Android 14) |
+| Base Engine | ZalithLauncher 1.5.0.0 |
+
+---
+
+## 🙏 Credits
+
+- **[ZalithLauncher](https://github.com/ZalithLauncher/ZalithLauncher)** — launcher engine, renderers, game integration
+- **[PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher)** — original Android Minecraft launcher
+- **[Fabric](https://fabricmc.net/)** / **[Forge](https://files.minecraftforge.net/)** / **[Quilt](https://quiltmc.org/)** / **[NeoForge](https://neoforged.net/)** — mod loaders
+
+---
+
+## 📄 License
+
+This project is licensed under the **GNU General Public License v3.0**.  
+See [LICENSE](LICENSE) for details.
+
+---
 
 <div align="center">
-
-[![Android CI](https://github.com/ZalithLauncher/ZalithLauncher/actions/workflows/android.yml/badge.svg)](https://github.com/ZalithLauncher/ZalithLauncher/actions/workflows/android.yml)
-![Downloads](https://img.shields.io/github/downloads/ZalithLauncher/ZalithLauncher/total)
-[![Sponsor](https://img.shields.io/badge/sponsor-30363D?logo=GitHub-Sponsors)](https://afdian.com/a/MovTery)
-
+Made with ⚡ by <a href="https://github.com/Denocompany">Deno Company</a>
 </div>
-
-- <a href="/README_ZH_CN.md">简体中文</a>丨<a href="/README-ZH_TW.md">繁體中文</a>
-- Zalith Launcher is a Minecraft launcher based on [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher) that runs [Minecraft: Java Edition](https://www.minecraft.net/) on Android devices.
-- Zalith Launcher aims to enhance user experience by redesigning the app interface, adding more practical features, and lowering the barrier to entry, making it easier for more people to enjoy Minecraft.
-
-> [!WARNING]
-> Attention! This project is only a **community remake**, just like PojavLauncher is developed based on [Boardwalk](https://github.com/zhuowei/Boardwalk).  
-> We are planning to build the official website [zalithlauncher.cn](https://zalithlauncher.cn). Please note, our website domain ends with `.cn`, not `.com`! **That is not our site!** We do not participate in, accept, or trust that site! Please be careful to distinguish it and protect your personal privacy!
-
-<h2 align="center">New Features</h2>
-
-- [x] Refactored app layout for improved aesthetics and usability.
-- [x] Built-in simple file manager to eliminate worries about Android permission restrictions!
-- [x] Better version management, customizable game directory location, allowing settings in external storage directories.
-- [x] Add more renderers, with support for renderer plugins!
-- [x] Download Mods, ModPacks, resource packs, saves, and shader packs directly within the launcher!
-- [x] Customizable virtual mouse icon and launcher background image.
-- [x] Light and dark themes available.
-- [x] And more features!
-
-<h2 align="center">Screenshots</h2>
-
-![Screenshot1](/.github/images/Screenshot_Launcher_Light_EN_US.jpg)
-![Screenshot2](/.github/images/Screenshot_Launcher_Dark_EN_US.jpg)
-![Screenshot3](/.github/images/Screenshot_Game_EN_US.jpg)
-
-<h2 align="center">License</h2>
-
-- Zalith Launcher is open source under the GPL v3 license.
-
-<h2 align="center">Special Thanks</h2>
-
-This project uses several useful code libraries. Special thanks to them!
-
-#### Code Libraries Used by PojavLauncher
-
->- [Boardwalk](https://github.com/zhuowei/Boardwalk) (JVM Launcher): Unknown license / [Apache License 2.0](https://github.com/zhuowei/Boardwalk/blob/master/LICENSE) or GNU GPLv2.
->- Android Support Library: [Apache License 2.0](https://android.googlesource.com/platform/prebuilts/maven_repo/android/+/master/NOTICE.txt).
->- [GL4ES](https://github.com/PojavLauncherTeam/gl4es): [MIT License](https://github.com/ptitSeb/gl4es/blob/master/LICENSE).
->- [OpenJDK](https://github.com/PojavLauncherTeam/openjdk-multiarch-jdk8u): [GNU GPLv2 License](https://openjdk.java.net/legal/gplv2+ce.html).
->- [LWJGL3](https://github.com/PojavLauncherTeam/lwjgl3): [BSD-3 License](https://github.com/LWJGL/lwjgl3/blob/master/LICENSE.md).
->- [LWJGLX](https://github.com/PojavLauncherTeam/lwjglx) (LWJGL2 API compatibility layer for LWJGL3): Unknown license.
->- [Mesa 3D Graphics Library](https://gitlab.freedesktop.org/mesa/mesa): [MIT License](https://docs.mesa3d.org/license.html).
->- [pro-grade](https://github.com/pro-grade/pro-grade) (Java Sandbox Security Manager): [Apache License 2.0](https://github.com/pro-grade/pro-grade/blob/master/LICENSE.txt).
->- [bhook](https://github.com/bytedance/bhook) (For exit code capture): [MIT License](https://github.com/bytedance/bhook/blob/main/LICENSE).
->- [libepoxy](https://github.com/anholt/libepoxy): [MIT License](https://github.com/anholt/libepoxy/blob/master/COPYING).
->- [virglrenderer](https://github.com/PojavLauncherTeam/virglrenderer): [MIT License](https://gitlab.freedesktop.org/virgl/virglrenderer/-/blob/master/COPYING).
-
-#### Additional Code Libraries Used by Zalith Launcher
-
->- [HMCL](https://github.com/HMCL-dev/HMCL) (uses some source code): [GPL-3.0 License](https://github.com/HMCL-dev/HMCL/blob/main/LICENSE)
->- [CommonMark](https://github.com/thephpleague/commonmark) (for rendering Markdown text): [BSD-3-Clause License](https://github.com/thephpleague/commonmark/blob/2.5/LICENSE)
->- [AndroidViewAnimations](https://github.com/daimajia/AndroidViewAnimations) (uses part of the animation source code): [MIT License](https://github.com/daimajia/AndroidViewAnimations/blob/master/License)
->- [TapTargetView](https://github.com/KeepSafe/TapTargetView) (for creating onboarding guides): [Apache License 2.0](https://github.com/KeepSafe/TapTargetView/blob/master/LICENSE)
