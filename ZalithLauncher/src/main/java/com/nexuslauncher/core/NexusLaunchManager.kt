@@ -5,16 +5,21 @@ import com.movtery.zalithlauncher.feature.accounts.AccountsManager
 import com.movtery.zalithlauncher.feature.version.Version
 import com.movtery.zalithlauncher.feature.version.VersionsManager
 import com.movtery.zalithlauncher.launch.LaunchGame
-import com.movtery.zalithlauncher.setting.AllSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 
 /**
- * NexusLaunchManager — Inicia o Minecraft via LaunchGame.preLaunch().
+ * NexusLaunchManager — Lança o Minecraft via LaunchGame.preLaunch().
  *
- * API real: LaunchGame.preLaunch(context, version) — launches via ContextAwareDoneListener.
+ * APIs reais:
+ * - LaunchGame.preLaunch(context: Context, version: Version)
+ * - VersionsManager.getVersions()          → List<Version>
+ * - VersionsManager.getCurrentVersion()    → Version?
+ * - VersionsManager.isVersionExists(name)  → Boolean
+ * - AccountsManager.allAccounts            → List<MinecraftAccount>
+ * - AccountsManager.currentAccount         → MinecraftAccount? (var)
  */
 object NexusLaunchManager {
 
@@ -29,23 +34,23 @@ object NexusLaunchManager {
     private val _status = MutableStateFlow(LaunchStatus())
     val status: StateFlow<LaunchStatus> = _status
 
+    data class ReadinessResult(val isReady: Boolean, val issues: List<String>)
+
     /** Verifica pré-requisitos antes de lançar. */
     fun checkReadiness(instance: NexusInstanceManager.NexusInstance): ReadinessResult {
         val issues = mutableListOf<String>()
-
-        val account = try { AccountsManager.currentAccount } catch (e: Exception) { null }
-        if (account == null) {
-            issues += "Sem conta configurada. Vá em PERSONA e adicione uma conta."
+        try {
+            if (AccountsManager.allAccounts.isEmpty()) {
+                issues += "Sem conta. Vá em PERSONA e adicione uma conta offline."
+            }
+        } catch (_: Exception) {
+            issues += "Erro ao verificar conta."
         }
-
         if (!instance.isReady) {
             issues += "Versão ${instance.mcVersion} não instalada. Instale em INSTARRION."
         }
-
         return ReadinessResult(issues.isEmpty(), issues)
     }
-
-    data class ReadinessResult(val isReady: Boolean, val issues: List<String>)
 
     /** Lança o Minecraft para a instância especificada. */
     suspend fun launch(
@@ -53,43 +58,47 @@ object NexusLaunchManager {
         instance: NexusInstanceManager.NexusInstance
     ): Boolean = withContext(Dispatchers.Main) {
         try {
-            _status.value = LaunchStatus(LaunchState.CHECKING, "Verificando...")
+            _status.value = LaunchStatus(LaunchState.CHECKING, "Verificando pré-requisitos...")
 
-            val readiness = checkReadiness(instance)
+            val readiness = withContext(Dispatchers.IO) { checkReadiness(instance) }
             if (!readiness.isReady) {
                 _status.value = LaunchStatus(LaunchState.ERROR, errorMsg = readiness.issues.joinToString("\n"))
                 return@withContext false
             }
 
-            _status.value = LaunchStatus(LaunchState.LAUNCHING, "Iniciando Minecraft ${instance.mcVersion}...")
+            _status.value = LaunchStatus(LaunchState.LAUNCHING, "Iniciando ${instance.mcVersion}...")
 
-            // Configurar diretório do jogo para esta instância
+            // Refresh lista de versões no fundo
             withContext(Dispatchers.IO) {
-                AllSettings.gamePath.put(instance.dirPath).save()
+                VersionsManager.refresh("NexusLaunchManager")
             }
 
-            // Obter objeto Version do ZalithLauncher
+            // Busca versão pelo nome na lista de versões carregadas
             val version: Version? = withContext(Dispatchers.IO) {
-                try { VersionsManager.getVersion(instance.mcVersion) }
-                catch (e: Exception) { null }
+                VersionsManager.getVersions().firstOrNull { v ->
+                    v.getVersionName() == instance.mcVersion && v.isValid()
+                }
             }
 
             if (version == null) {
-                _status.value = LaunchStatus(LaunchState.ERROR, errorMsg = "Versão ${instance.mcVersion} não encontrada.")
+                _status.value = LaunchStatus(
+                    LaunchState.ERROR,
+                    errorMsg = "Versão '${instance.mcVersion}' não encontrada. Instale-a primeiro."
+                )
                 return@withContext false
             }
 
-            // Marcar como última usada
-            NexusInstanceManager.setLastUsed(instance.id)
+            // Marca como última usada
+            withContext(Dispatchers.IO) { NexusInstanceManager.setLastUsed(instance.id) }
 
-            // Lançar via LaunchGame.preLaunch() — API real do ZalithLauncher
+            // Lança via API real do ZalithLauncher
             LaunchGame.preLaunch(context, version)
 
             _status.value = LaunchStatus(LaunchState.RUNNING, "Minecraft rodando!")
             true
 
         } catch (e: Exception) {
-            _status.value = LaunchStatus(LaunchState.ERROR, errorMsg = "Falha ao iniciar: ${e.message}")
+            _status.value = LaunchStatus(LaunchState.ERROR, errorMsg = "Falha: ${e.message}")
             false
         }
     }
