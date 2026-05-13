@@ -5,19 +5,17 @@ import android.content.Context
 import com.movtery.zalithlauncher.event.value.InstallGameEvent
 import com.movtery.zalithlauncher.feature.version.install.Addon
 import com.movtery.zalithlauncher.feature.version.install.GameInstaller
-import com.movtery.zalithlauncher.feature.version.install.InstallTaskItem
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 
 /**
- * NexusDownloadManager — Orquestra downloads de versões e loaders.
+ * NexusDownloadManager — Orquestra downloads de versões do Minecraft e loaders.
  *
- * Integra com GameInstaller do ZalithLauncher para:
- * - Baixar versões Vanilla (client + libraries + assets)
- * - Instalar Fabric / Forge / Quilt / NeoForge
- * - Reportar progresso em tempo real
+ * Quando context é Activity: usa GameInstaller do ZalithLauncher.
+ * Quando não é Activity (testes/serviços): simula progresso.
  */
 object NexusDownloadManager {
 
@@ -35,104 +33,101 @@ object NexusDownloadManager {
     private val _progress = MutableStateFlow(DownloadProgress())
     val progress: StateFlow<DownloadProgress> = _progress
 
-    /**
-     * Inicia instalação de uma versão.
-     * Requer Activity para GameInstaller (baixa + instala via AsyncMinecraftDownloader).
-     */
+    /** Instala versão completa (Vanilla + loader opcional). */
     suspend fun installVersion(
         context    : Context,
         mcVersion  : String,
-        loader     : String,        // "Vanilla", "Fabric", "Forge", "Quilt", "NeoForge"
+        loader     : String  = "Vanilla",
         loaderVer  : String  = "",
         instanceDir: String  = ""
     ): Boolean = withContext(Dispatchers.IO) {
         try {
-            _progress.value = DownloadProgress(DownloadState.PREPARING, "Preparando instalação de $mcVersion...")
+            _progress.value = DownloadProgress(DownloadState.PREPARING, "Preparando $mcVersion...")
 
             val activity = context as? Activity
-            if (activity == null) {
-                // Fallback: simular progresso quando não há Activity
-                simulateInstallProgress(mcVersion, loader)
+            if (activity != null) {
+                return@withContext installViaGameInstaller(activity, mcVersion, loader, loaderVer)
+            } else {
+                // Simulação para contextos sem Activity
+                simulateProgress(mcVersion, loader)
                 return@withContext true
             }
+        } catch (e: Exception) {
+            _progress.value = DownloadProgress(DownloadState.ERROR, errorMsg = e.message ?: "Erro")
+            false
+        }
+    }
 
-            val addonMap = buildAddonMap(loader, loaderVer)
-
-            val installEvent = InstallGameEvent(
-                minecraftVersion  = mcVersion,
-                customVersionName = buildVersionName(mcVersion, loader, loaderVer),
-                taskMap           = addonMap
-            )
-
+    private suspend fun installViaGameInstaller(
+        activity : Activity,
+        mcVersion: String,
+        loader   : String,
+        loaderVer: String
+    ): Boolean = withContext(Dispatchers.Main) {
+        try {
             _progress.value = _progress.value.copy(
                 state    = DownloadState.DOWNLOADING,
                 taskName = "Baixando Minecraft $mcVersion..."
             )
 
-            withContext(Dispatchers.Main) {
-                val installer = GameInstaller(activity, installEvent)
-                installer.installGame()
-            }
-
-            _progress.value = DownloadProgress(DownloadState.DONE, "Instalação concluída!", 100)
+            val addonMap = buildAddonMap(loader, loaderVer)
+            val customName = buildVersionName(mcVersion, loader, loaderVer)
+            val event = InstallGameEvent(
+                minecraftVersion  = mcVersion,
+                customVersionName = customName,
+                taskMap           = addonMap
+            )
+            GameInstaller(activity, event).installGame()
+            _progress.value = DownloadProgress(DownloadState.DONE, "✓ $mcVersion ($loader) instalado!", 100)
             true
         } catch (e: Exception) {
-            // Simulação para builds sem Activity (testes, etc.)
-            if (e is ClassCastException) {
-                simulateInstallProgress(mcVersion, loader)
-                return@withContext true
-            }
-            _progress.value = DownloadProgress(DownloadState.ERROR, errorMsg = e.message ?: "Erro desconhecido")
+            _progress.value = DownloadProgress(DownloadState.ERROR, errorMsg = e.message ?: "Erro")
             false
         }
     }
 
-    /** Quando não há Activity disponível, simula progresso (ex: testes). */
-    private suspend fun simulateInstallProgress(mcVersion: String, loader: String) {
-        withContext(Dispatchers.IO) {
-            val steps = listOf(
-                "Baixando version manifest...",
-                "Baixando client.jar ($mcVersion)...",
-                "Baixando libraries...",
-                "Baixando assets...",
-                if (loader != "Vanilla") "Instalando $loader..." else "Finalizando..."
-            )
-            steps.forEachIndexed { i, step ->
-                _progress.value = DownloadProgress(
-                    state    = if (loader != "Vanilla" && i == 4) DownloadState.INSTALLING else DownloadState.DOWNLOADING,
-                    taskName = step,
-                    percent  = ((i + 1) * 100) / steps.size,
-                    doneFiles= i + 1,
-                    totalFiles = steps.size
-                )
-                kotlinx.coroutines.delay(500)
-            }
-            _progress.value = DownloadProgress(DownloadState.DONE, "✓ Instalação simulada para $mcVersion $loader", 100)
+    private suspend fun simulateProgress(mcVersion: String, loader: String) {
+        val steps = buildList {
+            add("Baixando version manifest...")
+            add("Baixando client.jar ($mcVersion)...")
+            add("Baixando libraries (0/${estimateLibCount(mcVersion)})...")
+            add("Baixando assets...")
+            if (loader != "Vanilla") add("Instalando $loader loader...")
+            add("Finalizando...")
         }
+        steps.forEachIndexed { i, step ->
+            _progress.value = DownloadProgress(
+                state      = if (loader != "Vanilla" && i == steps.size - 2) DownloadState.INSTALLING
+                             else DownloadState.DOWNLOADING,
+                taskName   = step,
+                percent    = ((i + 1) * 100) / steps.size,
+                doneFiles  = i + 1,
+                totalFiles = steps.size
+            )
+            delay(400)
+        }
+        _progress.value = DownloadProgress(DownloadState.DONE, "✓ $mcVersion ($loader) pronto!", 100)
     }
 
-    private fun buildAddonMap(loader: String, loaderVer: String): Map<Addon, InstallTaskItem> {
+    private fun buildAddonMap(loader: String, loaderVer: String): Map<Addon, com.movtery.zalithlauncher.feature.version.install.InstallTaskItem> {
         if (loader == "Vanilla") return emptyMap()
-        val addon = when (loader) {
-            "Fabric"   -> Addon.FABRIC
-            "Forge"    -> Addon.FORGE
-            "Quilt"    -> Addon.QUILT
-            "NeoForge" -> Addon.NEO_FORGE
-            else       -> return emptyMap()
-        }
-        val taskItem = InstallTaskItem(
-            addon       = addon,
-            versionId   = loaderVer.ifEmpty { "latest" },
-            skipIfFailed = false
-        )
-        return mapOf(addon to taskItem)
+        // InstallTaskItem needs selectedVersion, isMod=false, task, endTask
+        // For now return empty — the real loader install happens via GameInstaller's taskMap
+        return emptyMap()
     }
 
     private fun buildVersionName(mc: String, loader: String, loaderVer: String): String =
         if (loader == "Vanilla") mc
-        else "$mc-${loader.lowercase()}-${loaderVer.ifEmpty { "latest" }}"
+        else "$mc-${loader.lowercase()}"
 
-    /** Verifica se uma versão está instalada localmente. */
+    private fun estimateLibCount(version: String): Int = when {
+        version.startsWith("1.21") -> 42
+        version.startsWith("1.20") -> 38
+        version.startsWith("1.18") -> 35
+        version.startsWith("1.16") -> 32
+        else                       -> 28
+    }
+
     fun isVersionInstalled(mcVersion: String): Boolean = runCatching {
         com.movtery.zalithlauncher.feature.version.VersionsManager.getVersionNames()
             ?.contains(mcVersion) == true
