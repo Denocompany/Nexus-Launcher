@@ -10,30 +10,35 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nexuslauncher.core.NexusAccountManager
+import com.nexuslauncher.core.NexusInstanceManager
+import com.nexuslauncher.core.NexusLaunchManager
+import com.nexuslauncher.core.NexusModManager
 import com.nexuslauncher.core.NexusSystemMonitor
 import com.nexuslauncher.ui.theme.DeepVoid
 import com.nexuslauncher.ui.theme.NexusCyan
 import com.nexuslauncher.ui.theme.NexusOrange
 import com.nexuslauncher.ui.theme.Obsidian
 import com.nexuslauncher.ui.theme.TextSecondary
+import kotlinx.coroutines.launch
 
 /**
- * HomeScreen — NEXUS PRIME (Fase 4 / NavHost).
- *
- * Callbacks explícitos substituem o genérico onNavigateTo(String).
- * O botão ArrowBack / onBackToSolar navega de volta ao Sistema Solar.
+ * HomeScreen — NEXUS PRIME.
+ * Mostra a última instância, métricas reais do sistema,
+ * e lança o jogo via NexusLaunchManager.
  */
 @Composable
 fun HomeScreen(
-    instanceName    : String                             = "Survival 1.18.1",
+    instanceName    : String                             = "",
     metrics         : NexusSystemMonitor.SystemMetrics   = NexusSystemMonitor.SystemMetrics(),
     onLaunchGame    : () -> Unit = {},
     onConfigInstance: () -> Unit = {},
@@ -48,6 +53,19 @@ fun HomeScreen(
     onGoSettings    : () -> Unit = {},
     onBackToSolar   : () -> Unit = {}
 ) {
+    val context      = LocalContext.current
+    val scope        = rememberCoroutineScope()
+    val instances    by NexusInstanceManager.instances.collectAsState()
+    val activeProfile by NexusAccountManager.activeProfile.collectAsState()
+    val launchStatus  by NexusLaunchManager.status.collectAsState()
+
+    val lastInst       = remember(instances) { NexusInstanceManager.getLastUsed() }
+    val displayName    = lastInst?.name ?: instanceName.ifEmpty { "Nenhuma instância" }
+    val modCount       = remember(lastInst) { lastInst?.let { NexusInstanceManager.getModCount(it.id) } ?: 0 }
+    val isReadyToPlay  = lastInst?.isReady == true && activeProfile != null
+
+    var launchError    by remember { mutableStateOf("") }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -55,7 +73,7 @@ fun HomeScreen(
             .verticalScroll(rememberScrollState())
     ) {
 
-        // ── Top Bar ──────────────────────────────────────────────────────
+        // ── Top Bar ──────────────────────────────────────────────────────────
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -80,50 +98,104 @@ fun HomeScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // ── Linha principal: 3 cards ─────────────────────────────────────
+        // ── Launch error / status message ────────────────────────────────────
+        if (launchStatus.state == NexusLaunchManager.LaunchState.ERROR) {
+            Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFFCF4455).copy(0.12f))
+                .border(1.dp, Color(0xFFCF4455).copy(0.4f), RoundedCornerShape(8.dp))
+                .padding(10.dp)) {
+                Text(launchStatus.errorMsg, color = Color(0xFFCF4455), fontSize = 11.sp)
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
+        // ── Main cards row ───────────────────────────────────────────────────
         Row(
             modifier              = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Last instance card
             NexusHomeCard(modifier = Modifier.weight(1f)) {
                 Text("ÚLTIMA INSTÂNCIA", color = NexusCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 Spacer(Modifier.height(10.dp))
-                Text(instanceName, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("Shaders Ativos", color = TextSecondary, fontSize = 11.sp)
-                Spacer(Modifier.height(14.dp))
+                Text(displayName, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    when {
+                        lastInst == null     -> "Crie uma instância"
+                        !lastInst.isReady    -> "⬇ Aguardando instalação"
+                        modCount > 0         -> "$modCount mod(s) · ${lastInst.loader}"
+                        else                 -> "${lastInst.mcVersion} · ${lastInst.loader}"
+                    },
+                    color    = TextSecondary, fontSize = 10.sp
+                )
+                if (activeProfile == null) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("⚠ Sem conta ativa", color = NexusOrange, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     SmallActionButton("Configurar") { onConfigInstance() }
                     SmallActionButton("Gerenciar")  { onManageInstance() }
                 }
             }
 
+            // Launch button column
             Column(
                 modifier            = Modifier.weight(1f),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
                 Button(
-                    onClick   = onLaunchGame,
+                    onClick   = {
+                        val inst = lastInst
+                        if (inst != null) {
+                            scope.launch {
+                                launchError = ""
+                                val ok = NexusLaunchManager.launch(context, inst)
+                                if (!ok) launchError = launchStatus.errorMsg
+                                else onLaunchGame()
+                            }
+                        } else {
+                            onGoInstances()
+                        }
+                    },
                     modifier  = Modifier.fillMaxWidth().height(80.dp),
                     shape     = RoundedCornerShape(12.dp),
-                    colors    = ButtonDefaults.buttonColors(backgroundColor = NexusOrange),
+                    colors    = ButtonDefaults.buttonColors(
+                        backgroundColor = if (isReadyToPlay) NexusOrange else NexusCyan.copy(0.5f)
+                    ),
                     elevation = ButtonDefaults.elevation(8.dp)
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("🚀", fontSize = 22.sp)
+                        Text(when (launchStatus.state) {
+                            NexusLaunchManager.LaunchState.CHECKING   -> "⏳"
+                            NexusLaunchManager.LaunchState.LAUNCHING  -> "🚀"
+                            NexusLaunchManager.LaunchState.RUNNING    -> "🎮"
+                            else -> if (lastInst == null) "📂" else "🚀"
+                        }, fontSize = 22.sp)
                         Text(
-                            "INICIAR JOGO",
+                            when (launchStatus.state) {
+                                NexusLaunchManager.LaunchState.CHECKING  -> "VERIFICANDO..."
+                                NexusLaunchManager.LaunchState.LAUNCHING -> "INICIANDO..."
+                                NexusLaunchManager.LaunchState.RUNNING   -> "RODANDO"
+                                else -> if (lastInst == null) "CRIAR INSTÂNCIA" else "INICIAR JOGO"
+                            },
                             color         = Color.White,
                             fontWeight    = FontWeight.Black,
-                            fontSize      = 13.sp,
+                            fontSize      = 12.sp,
                             letterSpacing = 1.5.sp
                         )
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                Text("v1.18.1 • Survival", color = TextSecondary, fontSize = 10.sp)
+                Text(
+                    lastInst?.let { "${it.mcVersion} · ${it.loader}" } ?: "Nenhuma instância",
+                    color = TextSecondary, fontSize = 10.sp
+                )
             }
 
+            // System status card
             NexusHomeCard(modifier = Modifier.weight(1f)) {
                 Text("STATUS DO SISTEMA", color = NexusCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 Spacer(Modifier.height(10.dp))
@@ -135,12 +207,13 @@ fun HomeScreen(
                 Spacer(Modifier.height(4.dp))
                 StatusRow("RAM", "${String.format("%.1f", metrics.ramGb)}/${String.format("%.0f", metrics.ramTotalGb)}GB", Color(0xFF00E676))
                 Spacer(Modifier.height(8.dp))
-                SmallActionButton("Ver Performance") { onBoost() }
+                SmallActionButton("Performance") { onBoost() }
             }
         }
 
         Spacer(Modifier.height(16.dp))
 
+        // ── Quick actions ────────────────────────────────────────────────────
         Text(
             "ATALHOS RÁPIDOS",
             color         = TextSecondary,
@@ -153,14 +226,15 @@ fun HomeScreen(
             modifier              = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            QuickCard("⚡", "Nexus Boost",           "Otimizar agora",       NexusCyan,         Modifier.weight(1f)) { onBoost() }
-            QuickCard("🎨", "Pacotes de Textura",    "Shaders HDR Ativado",  Color(0xFF7B61FF), Modifier.weight(1f)) { onTextures() }
-            QuickCard("🧩", "Mods & Plugins",        "5 ativos",             NexusOrange,       Modifier.weight(1f)) { onMods() }
-            QuickCard("📊", "Relatório de Desempenho","Média: ${metrics.fpsCurrent} FPS", Color(0xFF00E676), Modifier.weight(1f)) { onReports() }
+            QuickCard("⚡", "Nexus Boost",   "Otimizar agora",       NexusCyan,         Modifier.weight(1f)) { onBoost() }
+            QuickCard("🎨", "Visual",        "Shaders & Tema",       Color(0xFF7B61FF), Modifier.weight(1f)) { onTextures() }
+            QuickCard("🧩", "Mods",          "$modCount mod(s)",     NexusOrange,       Modifier.weight(1f)) { onMods() }
+            QuickCard("📊", "Relatórios",    "${metrics.fpsCurrent} FPS avg", Color(0xFF00E676), Modifier.weight(1f)) { onReports() }
         }
 
         Spacer(Modifier.height(16.dp))
 
+        // ── Quick navigation ─────────────────────────────────────────────────
         Text(
             "NAVEGAÇÃO RÁPIDA",
             color         = TextSecondary,
@@ -174,10 +248,10 @@ fun HomeScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             listOf(
-                Triple("🌐", "Instâncias",    onGoInstances),
-                Triple("👤", "Contas",         onGoAccounts),
-                Triple("🖥", "Visual",          onGoVisual),
-                Triple("⚙", "Configurações",  onGoSettings),
+                Triple("🌐", "Instâncias",   onGoInstances),
+                Triple("👤", "Contas",        onGoAccounts),
+                Triple("🖥",  "Visual",       onGoVisual),
+                Triple("⚙",  "Config",        onGoSettings),
             ).forEach { (icon, label, action) ->
                 Box(
                     modifier = Modifier
@@ -200,15 +274,16 @@ fun HomeScreen(
 
         Spacer(Modifier.height(16.dp))
 
+        // ── Bottom status bar ─────────────────────────────────────────────────
         Row(
             modifier              = Modifier.fillMaxWidth().background(Color(0xFF080812)).padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalAlignment     = Alignment.CenterVertically
         ) {
-            BottomStatusItem("🚀", "Nexus Boost")
-            BottomStatusItem("🎨", "Shaders HDR")
-            BottomStatusItem("🧩", "5 Mods Ativos")
-            BottomStatusItem("📊", "Relatório FPS")
+            BottomStatusItem("👤", activeProfile?.username ?: "Sem conta")
+            BottomStatusItem("🧩", "$modCount mods")
+            BottomStatusItem("🪐", "${instances.size} instâncias")
+            BottomStatusItem("⚡", launchStatus.state.name.lowercase().replaceFirstChar { it.uppercase() })
         }
     }
 }
