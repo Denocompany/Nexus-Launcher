@@ -39,4 +39,7 @@
     <color name="icon_color">#151515</color>
 
     <color name="primary_text">#0E0E0E</color>
+    <color name="colorAccent">#3299AB</color>
+    <color name="colorPrimary">#2D8B9C</color>
+    <color name="colorPrimaryDark">#1A6B7C</color>
 </resources>

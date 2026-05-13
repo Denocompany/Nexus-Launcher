@@ -56,11 +56,10 @@ android {
 
     signingConfigs {
         create("releaseBuild") {
-            val pwd = System.getenv("MOVTERY_KEYSTORE_PASSWORD")
-            storeFile = file("movtery-key.jks")
-            storePassword = pwd
-            keyAlias = "mtp"
-            keyPassword = pwd
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
         }
         create("customDebug") {
             storeFile = file("debug.keystore")
@@ -190,8 +189,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.0")
     implementation("androidx.palette:palette-ktx:1.0.0")
     implementation("com.github.duanhong169:checkerboarddrawable:1.0.2")
-    implementation("com.github.PojavLauncherTeam:portrait-sdp:ed33e89cbc")
-    implementation("com.github.PojavLauncherTeam:portrait-ssp:6c02fd739b")
+    implementation("com.intuit.sdp:sdp-android:1.1.0")
+    implementation("com.intuit.ssp:ssp-android:1.1.0")
     implementation("com.github.Mathias-Boulay:ExtendedView:1.0.0")
     implementation("com.github.Mathias-Boulay:android_gamepad_remapper:2.0.3")
     implementation("com.github.Mathias-Boulay:virtual-joystick-android:1.14")
