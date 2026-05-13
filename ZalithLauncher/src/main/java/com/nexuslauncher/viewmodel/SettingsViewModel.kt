@@ -30,6 +30,7 @@ class SettingsViewModel(private val dataStore: NexusDataStore) : ViewModel() {
     val beta            = dataStore.getBeta().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     val gamePath        = dataStore.getGamePath().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
 
+    // set* (original names)
     fun setAutoUpdate(v: Boolean)      = viewModelScope.launch { dataStore.setAutoUpdate(v) }
     fun setTelemetry(v: Boolean)       = viewModelScope.launch { dataStore.setTelemetry(v) }
     fun setExperimental(v: Boolean)    = viewModelScope.launch { dataStore.setExperimental(v) }
@@ -49,6 +50,20 @@ class SettingsViewModel(private val dataStore: NexusDataStore) : ViewModel() {
     fun setGpuOverclock(v: Boolean)    = viewModelScope.launch { dataStore.setGpuOverclock(v) }
     fun setBeta(v: Boolean)            = viewModelScope.launch { dataStore.setBeta(v) }
     fun setGamePath(v: String)         = viewModelScope.launch { dataStore.setGamePath(v) }
+
+    // update* aliases (used by SettingsScreen.kt)
+    fun updateAutoUpdate(v: Boolean)   = setAutoUpdate(v)
+    fun updateAutoSave(v: Boolean)     = setAutoSave(v)
+    fun updateCrashReport(v: Boolean)  = setCrashReport(v)
+    fun updateFullscreen(v: Boolean)   = setFullscreen(v)
+    fun updateVsync(v: Boolean)        = setVsync(v)
+    fun updateResolution(v: Int)       = setResolution(v)
+    fun updateLanguage(v: String)      = setLanguage(v)
+    fun updateGamePath(v: String)      = setGamePath(v)
+    fun updateNexusAI(v: Boolean)      = setNexusAI(v)
+    fun updatePredictiveBoost(v: Boolean) = setPredictiveBoost(v)
+    fun updateGpuOverclock(v: Boolean) = setGpuOverclock(v)
+    fun updateBeta(v: Boolean)         = setBeta(v)
 
     companion object {
         fun factory(ds: NexusDataStore) = viewModelFactory { initializer { SettingsViewModel(ds) } }
