@@ -129,8 +129,7 @@ object NexusDownloadManager {
     }
 
     fun isVersionInstalled(mcVersion: String): Boolean = runCatching {
-        com.movtery.zalithlauncher.feature.version.VersionsManager.getVersionNames()
-            ?.contains(mcVersion) == true
+        com.movtery.zalithlauncher.feature.version.VersionsManager.getVersions().any { it.getVersionName() == mcVersion && it.isValid() }
     }.getOrDefault(false)
 
     val COMMON_VERSIONS = listOf(
