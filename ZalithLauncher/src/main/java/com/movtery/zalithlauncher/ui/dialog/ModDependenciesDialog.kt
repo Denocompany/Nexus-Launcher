@@ -31,7 +31,7 @@ class ModDependenciesDialog(
         setContentView(binding.root)
 
         window?.apply {
-            val dimension = Tools.dpToPx(context.resources.getDimension(R.dimen._12sdp)).toInt()
+            val dimension = Tools.dpToPx(12f).toInt()
             attributes.width = Tools.currentDisplayMetrics.widthPixels - 2 * dimension
             attributes.height = Tools.currentDisplayMetrics.heightPixels - 2 * dimension
 

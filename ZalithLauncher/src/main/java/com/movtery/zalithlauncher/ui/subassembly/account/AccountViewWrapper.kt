@@ -46,7 +46,7 @@ class AccountViewWrapper(private val parentFragment: FragmentWithAnim? = null, v
                         mContext,
                         account,
                         Tools.dpToPx(
-                            mContext.resources.getDimensionPixelSize(R.dimen._52sdp).toFloat()
+                            52f
                         ).toInt()
                     )
                 )

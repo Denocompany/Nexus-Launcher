@@ -19,6 +19,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
@@ -119,13 +120,14 @@ fun SolarSystemScreen(
                     }
                 }
         ) {
+            drawIntoCanvas { composeCanvas ->
+            val nativeCanvas = composeCanvas.nativeCanvas
             val w     = size.width
             val h     = size.height
             val cx    = w / 2f
             val cy    = h / 2f
             val scale = minOf(w, h) / 1200f
             val t     = time * 0.001f
-            val nativeCanvas = drawContext.canvas.nativeCanvas
 
             textPaintName.textSize = (12f * scale * 80f).coerceIn(22f, 38f)
             textPaintDesc.textSize = (9f  * scale * 80f).coerceIn(16f, 28f)
@@ -212,6 +214,7 @@ fun SolarSystemScreen(
                 nativeCanvas.drawText(planet.name,        px, py - pr - 14f, textPaintName)
                 nativeCanvas.drawText(planet.description, px, py + pr + 20f, textPaintDesc)
             }
+            } // end drawIntoCanvas
         }
 
         Row(

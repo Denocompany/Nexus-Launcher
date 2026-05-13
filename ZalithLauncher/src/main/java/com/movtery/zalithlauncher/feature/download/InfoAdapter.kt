@@ -211,8 +211,8 @@ class InfoAdapter(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    marginEnd = context.resources.getDimensionPixelSize(R.dimen._4sdp)
-                    val verticalMargin = context.resources.getDimensionPixelSize(R.dimen._1sdp)
+                    marginEnd = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 4f, context.resources.displayMetrics).toInt()
+                    val verticalMargin = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 1f, context.resources.displayMetrics).toInt()
                     topMargin = verticalMargin
                     bottomMargin = verticalMargin
                 }
