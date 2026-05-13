@@ -2,7 +2,6 @@ package com.nexuslauncher.core
 
 import android.content.Context
 import com.movtery.zalithlauncher.feature.version.VersionsManager
-import com.movtery.zalithlauncher.feature.customprofilepath.ProfilePathManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
