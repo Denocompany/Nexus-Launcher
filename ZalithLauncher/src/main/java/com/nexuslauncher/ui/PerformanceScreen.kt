@@ -21,11 +21,15 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -197,64 +201,91 @@ fun PerformanceScreen(
 
 @Composable
 private fun FpsLineChart(fpsHistory: List<Int>, currentFps: Int, modifier: Modifier = Modifier) {
+    val textMeasurer = rememberTextMeasurer()
     val yMax = if (fpsHistory.isEmpty()) 120
                else maxOf(120, (((fpsHistory.maxOrNull() ?: 0) / 30 + 1) * 30))
 
     Canvas(modifier = modifier) {
         if (fpsHistory.size < 2) return@Canvas
-        drawIntoCanvas { composeCanvas ->
-            val nativeCanvas = composeCanvas.nativeCanvas
-            val w = size.width; val h = size.height
-            val padL = 36f; val padR = 8f; val padT = 12f; val padB = 12f
-            val chartW = w - padL - padR; val chartH = h - padT - padB
+        val w = size.width; val h = size.height
+        val padL = 36f; val padR = 8f; val padT = 12f; val padB = 12f
+        val chartW = w - padL - padR; val chartH = h - padT - padB
 
-            fun xOf(i: Int) = padL + (i.toFloat() / (fpsHistory.size - 1)) * chartW
-            fun yOf(fps: Int) = padT + chartH - (fps.toFloat() / yMax) * chartH
+        fun xOf(i: Int) = padL + (i.toFloat() / (fpsHistory.size - 1)) * chartW
+        fun yOf(fps: Int) = padT + chartH - (fps.toFloat() / yMax) * chartH
 
-            val gridPaint = android.graphics.Paint().apply { color = android.graphics.Color.argb(40, 100, 150, 255); strokeWidth = 1f; isAntiAlias = true }
-            val labelPaint = android.graphics.Paint().apply { color = android.graphics.Color.argb(140, 160, 170, 200); textSize = 22f; isAntiAlias = true; textAlign = android.graphics.Paint.Align.RIGHT }
+        // Grid lines + labels
+        val gridColor  = Color(android.graphics.Color.argb(40, 100, 150, 255))
+        val labelColor = Color(android.graphics.Color.argb(140, 160, 170, 200))
+        listOf(0, 30, 60, 90, 120).filter { it <= yMax }.forEach { fps ->
+            val y = yOf(fps)
+            drawLine(gridColor, Offset(padL, y), Offset(w - padR, y), strokeWidth = 1f)
+            val lm = textMeasurer.measure(
+                AnnotatedString("$fps"),
+                style = TextStyle(color = labelColor, fontSize = 8.sp)
+            )
+            drawText(lm, topLeft = Offset((padL - 4f - lm.size.width).coerceAtLeast(0f), y - lm.size.height / 2f))
+        }
 
-            listOf(0, 30, 60, 90, 120).filter { it <= yMax }.forEach { fps ->
-                val y = yOf(fps)
-                nativeCanvas.drawLine(padL, y, w - padR, y, gridPaint)
-                nativeCanvas.drawText("$fps", padL - 4f, y + 8f, labelPaint)
+        // Dashed 60 FPS target line
+        val targetY = yOf(60)
+        val targetColor = Color(android.graphics.Color.argb(120, 255, 109, 0))
+        drawLine(
+            targetColor, Offset(padL, targetY), Offset(w - padR, targetY),
+            strokeWidth = 2f,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f)
+        )
+
+        // Fill area under curve
+        val fillPath = Path().apply {
+            moveTo(xOf(0), yOf(fpsHistory[0]))
+            for (i in 1 until fpsHistory.size) {
+                val x0 = xOf(i - 1); val y0 = yOf(fpsHistory[i - 1])
+                val x1 = xOf(i);     val y1 = yOf(fpsHistory[i])
+                val cpX = (x0 + x1) / 2f
+                cubicTo(cpX, y0, cpX, y1, x1, y1)
             }
+            lineTo(xOf(fpsHistory.size - 1), padT + chartH)
+            lineTo(xOf(0), padT + chartH)
+            close()
+        }
+        drawPath(fillPath, brush = Brush.verticalGradient(
+            listOf(NexusCyan.copy(alpha = 0.35f), NexusCyan.copy(alpha = 0.02f)),
+            startY = padT, endY = padT + chartH
+        ))
 
-            val targetY = yOf(60)
-            val targetPaint = android.graphics.Paint().apply { color = android.graphics.Color.argb(120, 255, 109, 0); strokeWidth = 2f; isAntiAlias = true; pathEffect = android.graphics.DashPathEffect(floatArrayOf(8f, 6f), 0f) }
-            nativeCanvas.drawLine(padL, targetY, w - padR, targetY, targetPaint)
-
-            val fillPath = Path().apply {
-                moveTo(xOf(0), yOf(fpsHistory[0]))
-                for (i in 1 until fpsHistory.size) {
-                    val x0 = xOf(i - 1); val y0 = yOf(fpsHistory[i - 1]); val x1 = xOf(i); val y1 = yOf(fpsHistory[i]); val cpX = (x0 + x1) / 2f
-                    cubicTo(cpX, y0, cpX, y1, x1, y1)
-                }
-                lineTo(xOf(fpsHistory.size - 1), padT + chartH); lineTo(xOf(0), padT + chartH); close()
+        // FPS line
+        val linePath = Path().apply {
+            moveTo(xOf(0), yOf(fpsHistory[0]))
+            for (i in 1 until fpsHistory.size) {
+                val x0 = xOf(i - 1); val y0 = yOf(fpsHistory[i - 1])
+                val x1 = xOf(i);     val y1 = yOf(fpsHistory[i])
+                val cpX = (x0 + x1) / 2f
+                cubicTo(cpX, y0, cpX, y1, x1, y1)
             }
-            drawPath(fillPath, brush = Brush.verticalGradient(listOf(NexusCyan.copy(alpha = 0.35f), NexusCyan.copy(alpha = 0.02f)), startY = padT, endY = padT + chartH))
+        }
+        drawPath(linePath, color = NexusCyan, style = Stroke(width = 2.5f, cap = StrokeCap.Round, join = StrokeJoin.Round))
 
-            val linePath = Path().apply {
-                moveTo(xOf(0), yOf(fpsHistory[0]))
-                for (i in 1 until fpsHistory.size) {
-                    val x0 = xOf(i - 1); val y0 = yOf(fpsHistory[i - 1]); val x1 = xOf(i); val y1 = yOf(fpsHistory[i]); val cpX = (x0 + x1) / 2f
-                    cubicTo(cpX, y0, cpX, y1, x1, y1)
-                }
-            }
-            drawPath(linePath, color = NexusCyan, style = Stroke(width = 2.5f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        // Dot at latest reading
+        val lastX = xOf(fpsHistory.size - 1); val lastY = yOf(fpsHistory.last())
+        drawCircle(NexusCyan.copy(alpha = 0.25f), 9f, Offset(lastX, lastY))
+        drawCircle(NexusCyan, 4.5f, Offset(lastX, lastY))
+        drawCircle(Color.White, 2f, Offset(lastX, lastY))
 
-            val lastX = xOf(fpsHistory.size - 1); val lastY = yOf(fpsHistory.last())
-            drawCircle(color = NexusCyan.copy(alpha = 0.25f), radius = 9f, center = Offset(lastX, lastY))
-            drawCircle(color = NexusCyan, radius = 4.5f, center = Offset(lastX, lastY))
-            drawCircle(color = Color.White, radius = 2f, center = Offset(lastX, lastY))
+        // Floating FPS label
+        val floatLabel = "${fpsHistory.last()} FPS"
+        val flm = textMeasurer.measure(
+            AnnotatedString(floatLabel),
+            style = TextStyle(color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        )
+        val lx = (lastX - flm.size.width / 2f).coerceIn(padL, (w - padR - flm.size.width).coerceAtLeast(padL))
+        val ly = (lastY - flm.size.height - 14f).coerceAtLeast(padT)
+        drawText(flm, topLeft = Offset(lx, ly))
 
-            val floatLabelPaint = android.graphics.Paint().apply { color = android.graphics.Color.WHITE; textSize = 24f; isFakeBoldText = true; isAntiAlias = true; textAlign = android.graphics.Paint.Align.CENTER }
-            nativeCanvas.drawText("${fpsHistory.last()} FPS", lastX, (lastY - 14f).coerceAtLeast(padT + 24f), floatLabelPaint)
-
-            val dropPaint = android.graphics.Paint().apply { color = android.graphics.Color.argb(180, 255, 50, 50); strokeWidth = 2f; isAntiAlias = true }
-            fpsHistory.forEachIndexed { i, fps ->
-                if (fps < 30) nativeCanvas.drawCircle(xOf(i), yOf(fps), 4f, dropPaint)
-            }
+        // Red dots at FPS drops
+        val dropColor = Color(android.graphics.Color.argb(180, 255, 50, 50))
+        fpsHistory.forEachIndexed { i, fps ->
+            if (fps < 30) drawCircle(dropColor, 4f, Offset(xOf(i), yOf(fps)))
         }
     }
 }
