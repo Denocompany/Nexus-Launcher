@@ -18,22 +18,18 @@ jobs:
       matrix:
         arch: [ "all", "arm64" ]
       fail-fast: false
-
     env:
       CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY || 'DUMMY' }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Cache Gradle
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
@@ -42,26 +38,20 @@ jobs:
           restore-keys: ${{ runner.os }}-gradle-
 
       - name: Build JRE JAR files
-        run: |
-          chmod +x gradlew
-          mkdir -p out
-          ./gradlew jre_lwjgl3glfw:build --no-daemon
+        run: chmod +x gradlew && mkdir -p out && ./gradlew jre_lwjgl3glfw:build --no-daemon
 
       - name: Build Release APK (${{ matrix.arch }})
-        run: |
-          chmod +x gradlew
-          ./gradlew ZalithLauncher:assembleRelease -Darch=${{ matrix.arch }} --no-daemon
+        run: ./gradlew ZalithLauncher:assembleRelease -Darch=${{ matrix.arch }} --no-daemon
 
-      - name: Collect APK (${{ matrix.arch }})
+      - name: Collect APK
         run: |
           VERSION=$(grep 'launcher_version_name' gradle.properties | cut -d'=' -f2 | tr -d '[:space:]')
-          ARCH=${{ matrix.arch }}
           mkdir -p /tmp/apks
           find ZalithLauncher/build/outputs/apk/release -name "*.apk" | head -1 | \
-            xargs -I{} cp {} "/tmp/apks/NexusLauncher-v${VERSION}-${ARCH}.apk"
+            xargs -I{} cp {} "/tmp/apks/NexusLauncher-v${VERSION}-${{ matrix.arch }}.apk"
           ls -lh /tmp/apks/
 
-      - name: Upload APK artifact (${{ matrix.arch }})
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: NexusLauncher-${{ matrix.arch }}
@@ -74,66 +64,61 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Read version
         id: ver
         run: |
-          V=$(grep 'launcher_version_name' gradle.properties | cut -d'=' -f2 | tr -d '[:space:]')
-          C=$(grep 'launcher_version_code' gradle.properties | cut -d'=' -f2 | tr -d '[:space:]')
-          echo "version=$V" >> $GITHUB_OUTPUT
-          echo "code=$C" >> $GITHUB_OUTPUT
+          echo "version=$(grep 'launcher_version_name' gradle.properties | cut -d'=' -f2 | tr -d '[:space:]')" >> $GITHUB_OUTPUT
+          echo "code=$(grep 'launcher_version_code' gradle.properties | cut -d'=' -f2 | tr -d '[:space:]')" >> $GITHUB_OUTPUT
 
-      - name: Download all APKs
+      - name: Download APKs
         uses: actions/download-artifact@v4
         with:
           path: /tmp/release_apks
           merge-multiple: true
 
-      - name: List APKs
-        run: find /tmp/release_apks -name "*.apk" | sort
+      - name: Write release notes
+        run: |
+          VERSION=${{ steps.ver.outputs.version }}
+          CODE=${{ steps.ver.outputs.code }}
+          SHA=$(git rev-parse --short HEAD)
+          cat > /tmp/release_notes.md << EOF
+          ## Nexus Launcher v${VERSION} (Build ${CODE}) — ${SHA}
 
-      - name: Delete previous release (if exists)
+          ### Download directo (sem login necessario)
+          - **NexusLauncher-v${VERSION}-arm64.apk** — para a maioria dos telemoveis modernos (recomendado)
+          - **NexusLauncher-v${VERSION}-all.apk** — universal (todos os dispositivos)
+
+          ### Como instalar
+          1. Clique no ficheiro APK acima para descarregar
+          2. Ative Fontes desconhecidas nas definicoes do Android
+          3. Instale o APK
+
+          ### Alteracoes v1.5.0.0
+          - SolarSystemScreen: Canvas Compose puro, zero nativeCanvas
+          - PerformanceScreen: grafico FPS em Canvas Compose
+          - Correcao de 41 erros de compilacao
+          - DataStore persistencia: nexus_prefs
+          - 8 ViewModels integrados
+          EOF
+
+      - name: Delete previous release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release delete "v${{ steps.ver.outputs.version }}" --yes 2>/dev/null || true
           git push --delete origin "v${{ steps.ver.outputs.version }}" 2>/dev/null || true
 
-      - name: Create GitHub Release
+      - name: Publish GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION=${{ steps.ver.outputs.version }}
-          CODE=${{ steps.ver.outputs.code }}
-          SHA=$(git rev-parse --short HEAD)
-          APK_FILES=$(find /tmp/release_apks -name "*.apk" | sort | tr '\n' ' ')
-
-          gh release create "v${VERSION}" \
-            --title "Nexus Launcher v${VERSION}" \
+          gh release create "v${{ steps.ver.outputs.version }}" \
+            --title "Nexus Launcher v${{ steps.ver.outputs.version }}" \
+            --notes-file /tmp/release_notes.md \
             --latest \
-            --notes "## Nexus Launcher v${VERSION} (Build ${CODE})
-
-**Download:** Clique no ficheiro APK abaixo para instalar directamente.
-- **NexusLauncher-v${VERSION}-arm64.apk** → para a maioria dos telemóveis modernos (recomendado)
-- **NexusLauncher-v${VERSION}-all.apk** → universal (todos os dispositivos)
-
-### Alterações v1.5.0.0
-- SolarSystemScreen: Canvas Compose puro, zero nativeCanvas
-- PerformanceScreen: gráfico FPS em Canvas Compose
-- Eliminação total de drawContext.canvas.nativeCanvas
-- Correção de 41 erros de compilação (drawables de gamepad + sdp)
-- DataStore persistência: nexus_prefs
-- 8 ViewModels integrados com navegação
-
-### Instalação
-1. Descarrega o APK (arm64 para a maioria dos dispositivos)
-2. Ativa 'Fontes desconhecidas' nas definições
-3. Instala o APK
-
-> Commit: ${SHA}" \
-            $APK_FILES
+            $(find /tmp/release_apks -name "*.apk" | sort | tr '\n' ' ')
 
   BuildPR:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/main')
@@ -142,17 +127,14 @@ jobs:
       CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY || 'DUMMY' }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Cache Gradle
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
@@ -161,17 +143,12 @@ jobs:
           restore-keys: ${{ runner.os }}-gradle-
 
       - name: Build JRE JAR files
-        run: |
-          chmod +x gradlew
-          mkdir -p out
-          ./gradlew jre_lwjgl3glfw:build --no-daemon
+        run: chmod +x gradlew && mkdir -p out && ./gradlew jre_lwjgl3glfw:build --no-daemon
 
       - name: Build Release APK (arm64)
-        run: |
-          chmod +x gradlew
-          ./gradlew ZalithLauncher:assembleRelease -Darch=arm64 --no-daemon
+        run: ./gradlew ZalithLauncher:assembleRelease -Darch=arm64 --no-daemon
 
-      - name: Upload Debug APK (arm64)
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: NexusLauncher-PR-arm64
