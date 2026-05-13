@@ -1,6 +1,5 @@
 package com.nexuslauncher.ui.solar
 
-import android.graphics.Paint as NativePaint
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -19,10 +18,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -35,9 +35,9 @@ import kotlin.math.sqrt
 
 @Composable
 fun SolarSystemScreen(
-    nexusDataStore  : NexusDataStore? = null,
-    vm: SolarSystemViewModel = viewModel(),
-    onPlanetSelected: (PlanetId) -> Unit = {}
+    nexusDataStore   : NexusDataStore? = null,
+    vm               : SolarSystemViewModel = viewModel(),
+    onPlanetSelected : (PlanetId) -> Unit = {}
 ) {
     val solarVm: SolarViewModel? = nexusDataStore?.let {
         viewModel(factory = SolarViewModel.factory(it))
@@ -62,7 +62,7 @@ fun SolarSystemScreen(
         )
     }
 
-    val planetHitAreas = remember { mutableListOf<Triple<String, Float, Float>>() }
+    val planetHitAreas = remember { mutableStateListOf<Triple<String, Float, Float>>() }
 
     val infiniteTransition = rememberInfiniteTransition(label = "solar")
     val time by infiniteTransition.animateFloat(
@@ -72,8 +72,11 @@ fun SolarSystemScreen(
         label         = "time"
     )
 
+    val textMeasurer = rememberTextMeasurer()
+
     Box(Modifier.fillMaxSize()) {
 
+        // Fundo gradiente
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -84,22 +87,6 @@ fun SolarSystemScreen(
                     )
                 )
         )
-
-        val textPaintName = remember {
-            NativePaint().apply {
-                color          = android.graphics.Color.WHITE
-                textAlign      = NativePaint.Align.CENTER
-                isFakeBoldText = true
-                isAntiAlias    = true
-            }
-        }
-        val textPaintDesc = remember {
-            NativePaint().apply {
-                color       = android.graphics.Color.argb(180, 180, 220, 255)
-                textAlign   = NativePaint.Align.CENTER
-                isAntiAlias = true
-            }
-        }
 
         Canvas(
             modifier = Modifier
@@ -120,8 +107,6 @@ fun SolarSystemScreen(
                     }
                 }
         ) {
-            drawIntoCanvas { composeCanvas ->
-            val nativeCanvas = composeCanvas.nativeCanvas
             val w     = size.width
             val h     = size.height
             val cx    = w / 2f
@@ -129,29 +114,25 @@ fun SolarSystemScreen(
             val scale = minOf(w, h) / 1200f
             val t     = time * 0.001f
 
-            textPaintName.textSize = (12f * scale * 80f).coerceIn(22f, 38f)
-            textPaintDesc.textSize = (9f  * scale * 80f).coerceIn(16f, 28f)
-
-            val nebulaPaint = android.graphics.Paint().apply { isAntiAlias = true }
+            // Névoas (nebulae) em Canvas Compose puro
             listOf(
-                Triple(cx - w * 0.2f,  cy - h * 0.25f, "#1E0040"),
-                Triple(cx + w * 0.25f, cy + h * 0.15f, "#001540"),
-                Triple(cx - w * 0.1f,  cy + h * 0.2f,  "#000F2A")
-            ).forEach { (nx, ny, hex) ->
+                Triple(cx - w * 0.2f,  cy - h * 0.25f, Color(0x281E0040)),
+                Triple(cx + w * 0.25f, cy + h * 0.15f, Color(0x28001540)),
+                Triple(cx - w * 0.1f,  cy + h * 0.2f,  Color(0x28000F2A))
+            ).forEach { (nx, ny, color) ->
                 val nRadius = w * 0.22f
-                val shader  = android.graphics.RadialGradient(
-                    nx, ny, nRadius,
-                    intArrayOf(
-                        android.graphics.Color.parseColor(hex) and 0x00FFFFFF or 0x28000000,
-                        android.graphics.Color.TRANSPARENT
+                drawCircle(
+                    brush  = Brush.radialGradient(
+                        colors  = listOf(color, Color.Transparent),
+                        center  = Offset(nx, ny),
+                        radius  = nRadius
                     ),
-                    null,
-                    android.graphics.Shader.TileMode.CLAMP
+                    radius = nRadius,
+                    center = Offset(nx, ny)
                 )
-                nebulaPaint.shader = shader
-                nativeCanvas.drawCircle(nx, ny, nRadius, nebulaPaint)
             }
 
+            // Órbitas elípticas
             SolarSystem.PLANETS.forEach { planet ->
                 val rx = planet.orbitRadius * scale
                 val ry = rx * 0.40f
@@ -163,6 +144,7 @@ fun SolarSystemScreen(
                 )
             }
 
+            // Sol com pulso
             val sunPulse = 1f + sin(t * 1.5f) * 0.04f
             val sunR     = 52f * scale * sunPulse
             repeat(4) { i ->
@@ -176,19 +158,38 @@ fun SolarSystemScreen(
             drawCircle(color = Color(0xFFFFB300), radius = sunR,         center = Offset(cx, cy))
             drawCircle(color = Color(0xFFFF8F00), radius = sunR * 0.7f,  center = Offset(cx, cy))
 
-            nativeCanvas.drawText("NUCLEO NEXUS", cx, cy - sunR - 10f, textPaintName)
-
-            val metricPaint = NativePaint().apply {
-                color       = android.graphics.Color.argb(200, 0, 229, 255)
-                textAlign   = NativePaint.Align.CENTER
-                isAntiAlias = true
-                textSize    = textPaintDesc.textSize * 0.9f
-            }
-            nativeCanvas.drawText(
-                "CPU ${metrics.cpuPercent}%   FPS ${metrics.fpsCurrent}   GPU ${metrics.gpuPercent}%",
-                cx, cy + sunR + 26f, metricPaint
+            // Label do sol
+            val sunNameStyle = TextStyle(
+                color      = Color.White,
+                fontSize   = (14f * scale * 80f).coerceIn(11f, 19f).sp,
+                fontWeight = FontWeight.Bold
+            )
+            val sunLabelMeasured = textMeasurer.measure("NÚCLEO NEXUS", sunNameStyle)
+            drawText(
+                textLayoutResult = sunLabelMeasured,
+                topLeft          = Offset(
+                    x = cx - sunLabelMeasured.size.width / 2f,
+                    y = cy - sunR - sunLabelMeasured.size.height - 4.dp.toPx()
+                )
             )
 
+            // Métricas centrais abaixo do sol
+            val metricsText = "CPU ${metrics.cpuPercent}%   FPS ${metrics.fpsCurrent}   GPU ${metrics.gpuPercent}%"
+            val metricsStyle = TextStyle(
+                color      = Color(0xFF00E5FF).copy(alpha = 0.85f),
+                fontSize   = (9f * scale * 80f).coerceIn(9f, 14f).sp,
+                fontWeight = FontWeight.Medium
+            )
+            val metricsMeasured = textMeasurer.measure(metricsText, metricsStyle)
+            drawText(
+                textLayoutResult = metricsMeasured,
+                topLeft          = Offset(
+                    x = cx - metricsMeasured.size.width / 2f,
+                    y = cy + sunR + 8.dp.toPx()
+                )
+            )
+
+            // Planetas
             planetHitAreas.clear()
             SolarSystem.PLANETS.forEach { planet ->
                 val angle = t * planet.orbitSpeed
@@ -200,9 +201,25 @@ fun SolarSystemScreen(
 
                 planetHitAreas.add(Triple(planet.id, px, py))
 
-                drawCircle(color = planet.color.copy(alpha = 0.18f), radius = pr * 2.8f, center = Offset(px, py))
-                drawCircle(color = planet.color,                      radius = pr,         center = Offset(px, py))
-                drawCircle(color = Color.White.copy(alpha = 0.15f),   radius = pr * 0.5f,  center = Offset(px - pr * 0.2f, py - pr * 0.2f))
+                // Halo / glow
+                drawCircle(
+                    color  = planet.color.copy(alpha = 0.18f),
+                    radius = pr * 2.8f,
+                    center = Offset(px, py)
+                )
+                // Corpo do planeta
+                drawCircle(
+                    color  = planet.color,
+                    radius = pr,
+                    center = Offset(px, py)
+                )
+                // Brilho especular
+                drawCircle(
+                    color  = Color.White.copy(alpha = 0.15f),
+                    radius = pr * 0.5f,
+                    center = Offset(px - pr * 0.2f, py - pr * 0.2f)
+                )
+                // Anel do planeta
                 drawOval(
                     color   = planet.color.copy(alpha = 0.3f),
                     topLeft = Offset(px - pr * 1.6f, py - pr * 0.22f),
@@ -210,13 +227,38 @@ fun SolarSystemScreen(
                     style   = Stroke(width = 1.2f)
                 )
 
-                textPaintName.color = planet.color.toArgb()
-                nativeCanvas.drawText(planet.name,        px, py - pr - 14f, textPaintName)
-                nativeCanvas.drawText(planet.description, px, py + pr + 20f, textPaintDesc)
+                // Nome do planeta acima
+                val nameStyle = TextStyle(
+                    color      = planet.color,
+                    fontSize   = (12f * scale * 80f).coerceIn(11f, 19f).sp,
+                    fontWeight = FontWeight.Bold
+                )
+                val nameMeasured = textMeasurer.measure(planet.name, nameStyle)
+                drawText(
+                    textLayoutResult = nameMeasured,
+                    topLeft          = Offset(
+                        x = px - nameMeasured.size.width / 2f,
+                        y = py - pr - nameMeasured.size.height - 7.dp.toPx()
+                    )
+                )
+
+                // Descrição abaixo
+                val descStyle = TextStyle(
+                    color    = Color(0xFFB4CCFF).copy(alpha = 0.7f),
+                    fontSize = (9f * scale * 80f).coerceIn(9f, 14f).sp
+                )
+                val descMeasured = textMeasurer.measure(planet.description, descStyle)
+                drawText(
+                    textLayoutResult = descMeasured,
+                    topLeft          = Offset(
+                        x = px - descMeasured.size.width / 2f,
+                        y = py + pr + 5.dp.toPx()
+                    )
+                )
             }
-            } // end drawIntoCanvas
         }
 
+        // Barra de topo
         Row(
             Modifier
                 .fillMaxWidth()
@@ -241,6 +283,7 @@ fun SolarSystemScreen(
             )
         }
 
+        // Barra de rodapé
         Row(
             Modifier
                 .fillMaxWidth()
